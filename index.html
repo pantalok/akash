@@ -102,6 +102,18 @@
   .handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; } .handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
   .item-tags { position: absolute; top: calc(100% + 8px); left: 0; display: flex; gap: 4px; flex-wrap: wrap; max-width: 100%; pointer-events: none; }
   .tag-chip { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500; padding: 4px 10px; background: var(--ink); color: var(--bg); border-radius: 999px; letter-spacing: 0.04em; text-transform: lowercase; }
+  .item-timestamp { position: absolute; top: calc(100% + 8px); left: 0; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-faint); opacity: 0; transition: opacity 0.15s; pointer-events: none; white-space: nowrap; letter-spacing: 0.02em; }
+  .item-tags ~ .item-timestamp { top: calc(100% + 32px); }
+  .item:hover .item-timestamp { opacity: 1; }
+  .item-pin { position: absolute; top: 4px; right: 4px; width: 14px; height: 14px; pointer-events: none; color: var(--ink-faint); line-height: 1; }
+  .item-pin svg { width: 14px; height: 14px; }
+  .bookmarks-panel { position: fixed; z-index: 200; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; max-height: 60vh; overflow-y: auto; display: none; flex-direction: column; min-width: 260px; }
+  .bookmarks-panel.visible { display: flex; }
+  .bookmarks-panel .search-results-header { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); padding: 6px 12px 8px; }
+  .bookmarks-panel .search-result { display: flex; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; align-items: center; }
+  .bookmarks-panel .search-result:hover { background: var(--bg-deep); }
+  .bookmarks-panel .bookmark-meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-faint); margin-left: auto; white-space: nowrap; padding-left: 8px; }
+  .bookmarks-empty { padding: 12px 16px; font-size: 13px; color: var(--ink-faint); text-align: center; }
   #lasso { position: fixed; display: none; border: 1px solid var(--accent); background: var(--accent-soft); pointer-events: none; z-index: 10000; }
   
   /* Topbar */
@@ -223,13 +235,17 @@
           <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/>
           <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
-        <input id="search-input" type="text" placeholder="Search notes, files, tags...">
+        <input id="search-input" type="text" placeholder="Search notes, tags... recent:7d pinned:yes">
         <button class="clear-search" id="clear-search" title="Clear (Esc)">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         </button>
       </div>
     </div>
     <div class="panel">
+      <button class="btn icon-btn" id="bookmarks-btn" title="Bookmarks">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 1.5h8a.5.5 0 01.5.5v10.5a.5.5 0 01-.8.4L7 10l-3.7 2.9a.5.5 0 01-.8-.4V2a.5.5 0 01.5-.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="divider"></div>
       <button class="btn" id="upload-btn">Add image</button>
       <button class="btn" id="add-text-btn">Add note</button>
       <div class="divider"></div>
@@ -242,6 +258,11 @@
   <div id="search-results">
     <div class="search-results-header" id="search-results-header"></div>
     <div id="search-results-list" style="display:flex; flex-direction:column;"></div>
+  </div>
+
+  <div class="bookmarks-panel" id="bookmarks-panel">
+    <div class="search-results-header">Bookmarks</div>
+    <div id="bookmarks-list" style="display:flex; flex-direction:column;"></div>
   </div>
 
   <div id="help-box">
@@ -333,6 +354,9 @@
         <div class="swatch-row" id="color-swatches"></div>
         <div class="divider"></div>
       </div>
+      <button class="btn icon-btn" id="pin-btn" title="Pin / Bookmark">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 1.5h8a.5.5 0 01.5.5v10.5a.5.5 0 01-.8.4L7 10l-3.7 2.9a.5.5 0 01-.8-.4V2a.5.5 0 01.5-.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+      </button>
       <button class="btn icon-btn" id="duplicate-btn" title="Duplicate">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M10 4V2.5A1.5 1.5 0 008.5 1H2.5A1.5 1.5 0 001 2.5v6A1.5 1.5 0 002.5 10H4" stroke="currentColor" stroke-width="1.3"/></svg>
       </button>
@@ -616,6 +640,20 @@ function updateItemElement(el, item) {
     if (!tagsEl) { tagsEl = document.createElement('div'); tagsEl.className = 'item-tags'; el.appendChild(tagsEl); }
     tagsEl.innerHTML = tags.map(t => `<span class="tag-chip">${t}</span>`).join('');
   } else if (tagsEl) { tagsEl.remove(); }
+  // Render timestamp (hidden by default, shown on hover via CSS)
+  let tsEl = el.querySelector('.item-timestamp');
+  if (item.createdAt) {
+    if (!tsEl) { tsEl = document.createElement('div'); tsEl.className = 'item-timestamp'; el.appendChild(tsEl); }
+    const parts = [];
+    parts.push('Created ' + timeAgo(item.createdAt));
+    if (item.modifiedAt && item.modifiedAt !== item.createdAt) parts.push('Edited ' + timeAgo(item.modifiedAt));
+    tsEl.textContent = parts.join(' · ');
+  } else if (tsEl) { tsEl.remove(); }
+  // Render pin icon
+  let pinEl = el.querySelector('.item-pin');
+  if (item.pinned) {
+    if (!pinEl) { pinEl = document.createElement('div'); pinEl.className = 'item-pin'; pinEl.innerHTML = '<svg viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5h8a.5.5 0 01.5.5v10.5a.5.5 0 01-.8.4L7 10l-3.7 2.9a.5.5 0 01-.8-.4V2a.5.5 0 01.5-.5z"/></svg>'; el.appendChild(pinEl); }
+  } else if (pinEl) { pinEl.remove(); }
 }
 
 function updateSelectionVisuals() {
@@ -645,6 +683,7 @@ function updateContextToolbar() {
     tagInput.oninput = () => {
       const newTags = tagInput.value.split(',').map(t => t.trim()).filter(Boolean);
       item.tags = newTags;
+      item.modifiedAt = Date.now();
       updateItemElement(itemElements.get(item.id), item);
       scheduleSave();
     };
@@ -660,7 +699,7 @@ function renderColorSwatches(item) {
     const sw = document.createElement('button');
     sw.className = 'swatch' + (c.id === null ? ' default' : '') + ((item.bgColor || null) === c.id ? ' active' : '');
     if (c.color) sw.style.background = c.color;
-    sw.onclick = () => { pushUndo(); item.bgColor = c.id; renderAll(); scheduleSave(); };
+    sw.onclick = () => { pushUndo(); item.bgColor = c.id; item.modifiedAt = Date.now(); renderAll(); scheduleSave(); };
     row.appendChild(sw);
   }
 }
@@ -701,6 +740,12 @@ function attachItemHandlers(el, id) {
           state.pan.y = window.innerHeight / 2 - it.y * state.zoom - (it.height * state.zoom) / 2;
           applyTransform();
         }
+      } else {
+        // Drag completed — update modifiedAt on all moved items
+        state.selectedIds.forEach(sid => {
+          const it = state.items.find(i => i.id === sid);
+          if (it) it.modifiedAt = Date.now();
+        });
       }
       scheduleSave();
     };
@@ -750,6 +795,7 @@ function enterTextEdit(el, id) {
     if (newText !== item.content || newHtml !== item.contentHtml) {
       undoStack.push(snapshotBeforeEdit);
       if (undoStack.length > 50) undoStack.shift();
+      item.modifiedAt = Date.now();
     }
     item.content = newText; item.contentHtml = newHtml;
     // Shrink height to fit on blur (keep width as-is)
@@ -773,7 +819,12 @@ function attachResizeHandlers(el, id) {
         if (dir.includes('n')) { it.height = Math.max(30, oh - dy); it.y = oy + (oh - it.height); }
         renderAll();
       };
-      const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); scheduleSave(); };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
+        const it = state.items.find(i => i.id === id);
+        if (it) it.modifiedAt = Date.now();
+        scheduleSave();
+      };
       window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
     };
   });
@@ -886,7 +937,7 @@ window.addEventListener('paste', async e => {
       pushUndo();
       // Create note at max width, then fit height after render
       const MAX_W = 600;
-      const item = { id: uid(), type: 'text', x: w.x, y: w.y, width: MAX_W, height: 100, content: text, tags: [] };
+      const item = { id: uid(), type: 'text', x: w.x, y: w.y, width: MAX_W, height: 100, content: text, tags: [], createdAt: Date.now(), modifiedAt: Date.now() };
       state.items.push(item); selectItem(item.id); renderAll();
       // After render, measure actual content height and fit
       requestAnimationFrame(() => {
@@ -902,9 +953,22 @@ window.addEventListener('paste', async e => {
   }
 });
 
+function timeAgo(ms) {
+  if (!ms) return '';
+  const diff = Date.now() - ms;
+  if (diff < 10000) return 'just now';
+  if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+  const d = new Date(ms);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getMonth()] + ' ' + d.getDate();
+}
+
 function addText(x, y) {
   pushUndo();
-  const item = { id: uid(), type: 'text', x, y, width: 280, height: 100, content: '', tags: [] };
+  const item = { id: uid(), type: 'text', x, y, width: 280, height: 100, content: '', tags: [], createdAt: Date.now(), modifiedAt: Date.now() };
   state.items.push(item); selectItem(item.id); renderAll(); enterTextEdit(itemElements.get(item.id), item.id);
 }
 
@@ -930,7 +994,7 @@ async function handleFileAdd(files, sx, sy) {
       const scale = maxDim / Math.max(w, h);
       w = Math.round(w * scale); h = Math.round(h * scale);
     }
-    state.items.push({ id: uid(), type: 'image', x: sx, y: sy, width: w, height: h, naturalWidth: dims.w, naturalHeight: dims.h, file: name, tags: [] });
+    state.items.push({ id: uid(), type: 'image', x: sx, y: sy, width: w, height: h, naturalWidth: dims.w, naturalHeight: dims.h, file: name, tags: [], createdAt: Date.now(), modifiedAt: Date.now() });
   }
   renderAll(); scheduleSave();
 }
@@ -959,6 +1023,62 @@ $('duplicate-btn').onclick = () => {
   newIds.forEach(id => state.selectedIds.add(id));
   renderAll(); scheduleSave();
 };
+
+$('pin-btn').onclick = () => {
+  if (state.selectedIds.size === 0) return;
+  pushUndo();
+  state.selectedIds.forEach(sid => {
+    const item = state.items.find(i => i.id === sid);
+    if (item) { item.pinned = !item.pinned; item.modifiedAt = Date.now(); }
+  });
+  renderAll(); scheduleSave();
+};
+
+$('bookmarks-btn').onclick = (e) => {
+  e.stopPropagation();
+  const panel = $('bookmarks-panel');
+  if (panel.classList.contains('visible')) { panel.classList.remove('visible'); return; }
+  const list = $('bookmarks-list');
+  const pinned = state.items.filter(i => i.pinned);
+  list.innerHTML = '';
+  if (pinned.length === 0) {
+    list.innerHTML = '<div class="bookmarks-empty">No pinned items</div>';
+  } else {
+    pinned.forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = 'search-result';
+      const icon = item.type === 'text' ? '📝' : '🖼️';
+      let preview = '';
+      if (item.type === 'text') preview = (item.content || '').substring(0, 60) || 'Empty note';
+      else if (item.type === 'image') preview = item.file || 'Image';
+      else preview = item.originalName || item.file || 'File';
+      const ts = item.modifiedAt || item.createdAt;
+      const tsText = ts ? timeAgo(ts) : '';
+      row.innerHTML = `<div class="search-result-icon">${icon}</div><div class="search-result-text">${preview}</div>${tsText ? '<span class="bookmark-meta">' + tsText + '</span>' : ''}`;
+      row.onclick = () => {
+        state.pan.x = window.innerWidth / 2 - item.x * state.zoom - (item.width * state.zoom) / 2;
+        state.pan.y = window.innerHeight / 2 - item.y * state.zoom - (item.height * state.zoom) / 2;
+        selectItem(item.id);
+        applyTransform();
+        panel.classList.remove('visible');
+      };
+      list.appendChild(row);
+    });
+  }
+  // Position below bookmarks button
+  const btn = $('bookmarks-btn').getBoundingClientRect();
+  panel.style.top = (btn.bottom + 6) + 'px';
+  panel.style.left = btn.left + 'px';
+  panel.classList.add('visible');
+};
+
+// Close bookmarks panel on outside click
+document.addEventListener('click', (e) => {
+  const panel = $('bookmarks-panel');
+  if (panel.classList.contains('visible') && !panel.contains(e.target) && e.target !== $('bookmarks-btn') && !$('bookmarks-btn').contains(e.target)) {
+    panel.classList.remove('visible');
+  }
+});
 
 let saveTimer = null;
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(async () => { if (storage) await storage.saveCanvas(state); }, 500); }
@@ -1003,33 +1123,95 @@ function applySearchFilter() {
   }
   clearBtn.classList.add('visible');
 
-  // Build regex — fall back to escaped literal if the pattern is invalid
-  let re;
-  try { re = new RegExp(query, 'i'); }
-  catch (e) { re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+  // Parse timeline and special tokens from query
+  let textQuery = query;
+  let afterDate = null, beforeDate = null, recentDays = null, pinnedOnly = false;
+  let hasTimelineTokens = false;
+
+  // Extract pinned:yes
+  textQuery = textQuery.replace(/\bpinned:yes\b/gi, () => { pinnedOnly = true; return ''; });
+
+  // Extract after:YYYY-MM-DD
+  textQuery = textQuery.replace(/\bafter:(\d{4}-\d{2}-\d{2})\b/g, (_, d) => {
+    afterDate = new Date(d + 'T00:00:00').getTime();
+    hasTimelineTokens = true;
+    return '';
+  });
+
+  // Extract before:YYYY-MM-DD
+  textQuery = textQuery.replace(/\bbefore:(\d{4}-\d{2}-\d{2})\b/g, (_, d) => {
+    beforeDate = new Date(d + 'T23:59:59').getTime();
+    hasTimelineTokens = true;
+    return '';
+  });
+
+  // Extract recent:Nd
+  textQuery = textQuery.replace(/\brecent:(\d+)d\b/gi, (_, n) => {
+    recentDays = parseInt(n);
+    hasTimelineTokens = true;
+    return '';
+  });
+
+  textQuery = textQuery.trim();
+
+  // Build regex from remaining text query — fall back to escaped literal if invalid
+  let re = null;
+  if (textQuery) {
+    try { re = new RegExp(textQuery, 'i'); }
+    catch (e) { re = new RegExp(textQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+  }
 
   const hits = [];
   state.items.forEach(it => {
-    let match = false;
+    // Check pinned filter
+    if (pinnedOnly && !it.pinned) return;
+
+    // Check timeline filters
+    if (hasTimelineTokens) {
+      const ts = it.modifiedAt || it.createdAt;
+      if (!ts) return; // no timestamp — treat as oldest, skip
+      if (afterDate && ts < afterDate) return;
+      if (beforeDate && ts > beforeDate) return;
+      if (recentDays !== null) {
+        const cutoff = Date.now() - recentDays * 86400000;
+        if (ts < cutoff) return;
+      }
+    }
+
+    let match = !re; // if no text query, all remaining items match
     let preview = '';
+
     // Search note content
-    if (it.type === 'text') {
+    if (re && it.type === 'text') {
       const text = it.content || '';
       if (re.test(text)) { match = true; preview = text.substring(0, 80); }
     }
     // Search tags
     const tags = it.tags || [];
-    if (!match && tags.some(t => re.test(t))) {
+    if (re && !match && tags.some(t => re.test(t))) {
       match = true;
       preview = 'tags: ' + tags.join(', ');
     }
     // Search file name
-    if (!match && it.type === 'image' && it.file && re.test(it.file)) {
+    if (re && !match && it.type === 'image' && it.file && re.test(it.file)) {
       match = true;
       preview = it.file;
     }
+
+    // If no text query but passed filters, generate a preview
+    if (match && !preview) {
+      if (it.type === 'text') preview = (it.content || '').substring(0, 80) || 'Empty note';
+      else if (it.type === 'image') preview = it.file || 'Image';
+      else if (it.type === 'file') preview = it.originalName || it.file || 'File';
+    }
+
     if (match) hits.push({ item: it, preview });
   });
+
+  // Sort by recency when timeline tokens are present
+  if (hasTimelineTokens) {
+    hits.sort((a, b) => (b.item.modifiedAt || b.item.createdAt || 0) - (a.item.modifiedAt || a.item.createdAt || 0));
+  }
 
   // Dim non-matching items, highlight matches
   state.items.forEach(it => {
@@ -1050,7 +1232,8 @@ function applySearchFilter() {
     row.className = 'search-result';
     row.dataset.idx = idx;
     const icon = item.type === 'text' ? '📝' : '🖼️';
-    row.innerHTML = `<div class="search-result-icon">${icon}</div><div class="search-result-text">${preview}</div>`;
+    const pinIcon = item.pinned ? '<span style="margin-left:4px;opacity:0.4;" title="Pinned">📌</span>' : '';
+    row.innerHTML = `<div class="search-result-icon">${icon}</div><div class="search-result-text">${preview}${pinIcon}</div>`;
     row.onclick = () => { navigateToSearchHit(idx); };
     resultsList.appendChild(row);
   });
@@ -1153,12 +1336,12 @@ $('font-size').addEventListener('change', (e) => {
       });
     } else {
       const item = state.items.find(i => i.id === editingEl.closest('.item').dataset.id);
-      if (item) { item.fontSize = parseInt(size); editingEl.closest('.item').style.fontSize = size + 'px'; }
+      if (item) { item.fontSize = parseInt(size); item.modifiedAt = Date.now(); editingEl.closest('.item').style.fontSize = size + 'px'; }
     }
     saveEditingNote();
   } else if (state.selectedIds.size === 1) {
     const item = state.items.find(i => i.id === Array.from(state.selectedIds)[0]);
-    if (item && item.type === 'text') { item.fontSize = parseInt(size); renderAll(); scheduleSave(); }
+    if (item && item.type === 'text') { item.fontSize = parseInt(size); item.modifiedAt = Date.now(); renderAll(); scheduleSave(); }
   }
   toolbarInteracting = false;
 });
@@ -1175,12 +1358,12 @@ $('font-family').addEventListener('change', (e) => {
       document.execCommand('fontName', false, family);
     } else {
       const item = state.items.find(i => i.id === editingEl.closest('.item').dataset.id);
-      if (item) { item.fontFamily = family; editingEl.closest('.item').style.fontFamily = family; }
+      if (item) { item.fontFamily = family; item.modifiedAt = Date.now(); editingEl.closest('.item').style.fontFamily = family; }
     }
     saveEditingNote();
   } else if (state.selectedIds.size === 1) {
     const item = state.items.find(i => i.id === Array.from(state.selectedIds)[0]);
-    if (item && item.type === 'text') { item.fontFamily = family; renderAll(); scheduleSave(); }
+    if (item && item.type === 'text') { item.fontFamily = family; item.modifiedAt = Date.now(); renderAll(); scheduleSave(); }
   }
   toolbarInteracting = false;
 });
