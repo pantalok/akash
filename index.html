@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AkashaBodhi — Local Workspace</title>
+<title>Ak@sh — Local Workspace</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,400&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
   }
   #viewport { position: fixed; inset: 0; overflow: hidden; cursor: default; background-color: var(--bg); background-image: radial-gradient(circle at 1px 1px, rgba(27,26,23,0.08) 1px, transparent 0); background-size: 28px 28px; }
   #viewport.panning { cursor: grabbing; } #viewport.space-mode { cursor: grab; }
-  #world { position: absolute; top: 0; left: 0; width: 0; height: 0; transform-origin: 0 0; will-change: transform; }
+  #world { position: absolute; top: 0; left: 0; width: 0; height: 0; transform-origin: 0 0; }
   
   /* Workspace Hub */
   #project-hub {
@@ -53,7 +53,7 @@
   .hub-actions { display: flex; flex-direction: column; align-items: center; gap: 16px; }
   
   /* Items */
-  .item { position: absolute; user-select: none; cursor: grab; transition: opacity 0.18s ease; will-change: transform, opacity; }
+  .item { position: absolute; user-select: none; cursor: grab; transition: opacity 0.18s ease; }
   .item.grabbing { cursor: grabbing; } .item.selected { z-index: 10; }
   .item.selected::before { content: ""; position: absolute; inset: -3px; border: 1.5px solid var(--selection); border-radius: 4px; pointer-events: none; }
   .item.dimmed { opacity: 0.32; }
@@ -61,7 +61,9 @@
   @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
   .item img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 2px; box-shadow: 0 2px 8px rgba(27,26,23,0.12), 0 0 0 1px rgba(27,26,23,0.06); background: var(--surface); }
   
-  .item.text { background: var(--surface); border-radius: 3px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 18px; min-width: 80px; min-height: 32px; overflow: auto; }
+  .item.text { background: var(--surface); border-radius: 8px; border-left: 3px solid var(--accent); box-shadow: 0 2px 10px rgba(27,26,23,0.08), 0 1px 3px rgba(27,26,23,0.06); padding: 14px 18px; min-width: 80px; min-height: 32px; overflow: auto; transition: box-shadow 0.2s ease, transform 0.2s ease; }
+  .item.text:hover { box-shadow: 0 4px 16px rgba(27,26,23,0.12), 0 1px 4px rgba(27,26,23,0.08); transform: translateY(-1px); }
+  .item.text { cursor: default; }
   .item.text .text-content { outline: none; cursor: text; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.4; width: 100%; height: 100%; }
   .item.text.editing { cursor: text; } .item.text.editing .text-content { user-select: text; }
   .item.text .text-content h1, .item.text .text-content h2, .item.text .text-content h3 { font-family: 'Fraunces', serif; font-weight: 500; line-height: 1.2; margin: 0 0 6px 0; letter-spacing: -0.01em; }
@@ -77,10 +79,9 @@
   .item.text .text-content .cb-line { display: flex; align-items: flex-start; gap: 7px; margin: 2px 0; }
   .item.text .text-content .cb-line input[type="checkbox"] { margin: 4px 0 0 0; cursor: pointer; accent-color: var(--ink); flex-shrink: 0; }
   .item.text .text-content .cb-line.done { color: var(--ink-faint); text-decoration: line-through; text-decoration-thickness: 1px; }
-  .item.text .text-content .empty-hint { color: var(--ink-faint); font-style: italic; font-size: 0.92em; }
-  .item.text.editing { outline: 2px dashed var(--accent); outline-offset: 4px; }
+  .item.text.editing { outline: none; box-shadow: 0 0 0 2px rgba(70, 130, 200, 0.3), 0 2px 12px rgba(70, 130, 200, 0.15); }
   .item.text.editing.selected::before { display: none; }
-  .item.text[data-empty]:not(.editing) .text-content::before { content: "double-click to edit"; color: var(--ink-faint); font-style: italic; font-size: 0.92em; pointer-events: none; }
+  .item.text[data-empty]:not(.editing) .text-content::before { content: "Type something..."; color: var(--ink-faint); font-style: italic; font-size: 0.92em; pointer-events: none; }
 
   .item.file, .item.link { background: var(--surface); border-radius: 6px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 16px; display: flex; align-items: center; gap: 14px; overflow: hidden; }
   .item.file:hover, .item.link:hover { box-shadow: 0 4px 14px rgba(27,26,23,0.14), 0 0 0 1px rgba(27,26,23,0.1); }
@@ -91,12 +92,15 @@
   .link-url { text-transform: none; letter-spacing: 0; font-size: 11px; }
 
   /* Handles */
-  .handles { position: absolute; inset: 0; pointer-events: none; }
-  .handle { position: absolute; width: 11px; height: 11px; background: var(--surface); border: 1.5px solid var(--ink); border-radius: 50%; pointer-events: auto; z-index: 11; }
-  .handle.nw { top: -8px; left: -8px; cursor: nwse-resize; } .handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
-  .handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; } .handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+  .handles { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s ease; }
+  .item.selected .handles { opacity: 1; }
+  .handle { position: absolute; width: 9px; height: 9px; background: var(--surface); border: 1.5px solid var(--ink); border-radius: 50%; pointer-events: auto; z-index: 11; }
+  .handle.nw { top: -6px; left: -6px; cursor: nwse-resize; } .handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+  .handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; } .handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+  .handle.n { top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; } .handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+  .handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; } .handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
   .item-tags { position: absolute; top: calc(100% + 8px); left: 0; display: flex; gap: 4px; flex-wrap: wrap; max-width: 100%; pointer-events: none; }
-  .tag-chip { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; padding: 3px 7px; background: var(--ink); color: var(--bg); border-radius: 999px; letter-spacing: 0.04em; text-transform: lowercase; }
+  .tag-chip { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500; padding: 4px 10px; background: var(--ink); color: var(--bg); border-radius: 999px; letter-spacing: 0.04em; text-transform: lowercase; }
   #lasso { position: fixed; display: none; border: 1px solid var(--accent); background: var(--accent-soft); pointer-events: none; z-index: 10000; }
   
   /* Topbar */
@@ -183,7 +187,7 @@
 <div id="project-hub">
   <div class="hub-container">
     <div class="hub-header">
-      <h1>AkashaBodhi</h1>
+      <h1>Ak@sh</h1>
       <p>Select a folder to open as a workspace, or create a new one.</p>
     </div>
     <div class="project-list" id="hub-project-list"></div>
@@ -210,7 +214,7 @@
 
   <div id="topbar">
     <div class="panel">
-      <div class="brand" id="brand-btn" title="Back to Workspaces">AkashaBodhi <sup>local</sup></div>
+      <div class="brand" id="brand-btn" title="Back to Workspaces">Ak@sh <sup>local</sup></div>
     </div>
     <div class="panel" id="search-panel">
       <div id="search">
@@ -521,10 +525,16 @@ async function bootCanvas(selectedStorage) {
 
 function uid() { return Math.random().toString(36).slice(2, 11); }
 function screenToWorld(sx, sy) { return { x: (sx - state.pan.x) / state.zoom, y: (sy - state.pan.y) / state.zoom }; }
+let rasterizeTimer = null;
 function applyTransform() {
+  // Enable GPU compositing during active zoom/pan for smooth performance
+  world.style.willChange = 'transform';
   world.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
   $('zoom-display').textContent = Math.round(state.zoom * 100) + '%';
-  cullItems(); 
+  cullItems();
+  // After interaction settles, drop will-change to force re-rasterization at current zoom
+  clearTimeout(rasterizeTimer);
+  rasterizeTimer = setTimeout(() => { world.style.willChange = 'auto'; }, 250);
 }
 
 function cullItems() {
@@ -544,7 +554,7 @@ function cullItems() {
 }
 
 function renderMarkdown(src) {
-  if (!src || !src.trim()) return '<div class="empty-hint">empty note · double-click to edit</div>';
+  if (!src || !src.trim()) return '';
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return src.split('\n').map(line => `<p>${esc(line)}</p>`).join('');
 }
@@ -581,9 +591,18 @@ function updateItemElement(el, item) {
     el.style.fontSize = (item.fontSize || 14) + 'px';
     const c = NOTE_COLORS.find(c => c.id === (item.bgColor || null));
     el.style.background = c ? c.color : '';
+    if (!item.content || !item.content.trim()) el.setAttribute('data-empty', '');
+    else el.removeAttribute('data-empty');
   } else if (item.type === 'file') {
     el.querySelector('.file-name').textContent = item.originalName || item.file;
   }
+  // Render tag chips below item
+  let tagsEl = el.querySelector('.item-tags');
+  const tags = item.tags || [];
+  if (tags.length > 0) {
+    if (!tagsEl) { tagsEl = document.createElement('div'); tagsEl.className = 'item-tags'; el.appendChild(tagsEl); }
+    tagsEl.innerHTML = tags.map(t => `<span class="tag-chip">${t}</span>`).join('');
+  } else if (tagsEl) { tagsEl.remove(); }
 }
 
 function updateSelectionVisuals() {
@@ -593,7 +612,7 @@ function updateSelectionVisuals() {
     if (isSel && state.selectedIds.size === 1) {
       if (!handles) {
         handles = document.createElement('div'); handles.className = 'handles';
-        ['nw','ne','sw','se'].forEach(dir => { const h = document.createElement('div'); h.className = 'handle ' + dir; h.dataset.dir = dir; handles.appendChild(h); });
+        ['nw','n','ne','w','e','sw','s','se'].forEach(dir => { const h = document.createElement('div'); h.className = 'handle ' + dir; h.dataset.dir = dir; handles.appendChild(h); });
         el.appendChild(handles); attachResizeHandlers(el, id);
       }
     } else { if (handles) handles.remove(); }
@@ -601,11 +620,25 @@ function updateSelectionVisuals() {
 }
 
 function updateContextToolbar() {
-  if (state.selectedIds.size === 0) { $('context-toolbar').classList.remove('visible'); return; }
+  if (state.selectedIds.size === 0) { $('context-toolbar').classList.remove('visible'); $('tag-input').onchange = null; $('tag-input').oninput = null; return; }
   $('context-toolbar').classList.add('visible');
   const item = state.selectedIds.size === 1 ? state.items.find(i => i.id === Array.from(state.selectedIds)[0]) : null;
   $('text-controls').style.display = (item && item.type === 'text') ? 'inline-flex' : 'none';
   if (item && item.type === 'text') renderColorSwatches(item);
+  // Populate and bind tag input
+  const tagInput = $('tag-input');
+  if (item) {
+    tagInput.value = (item.tags || []).join(', ');
+    tagInput.oninput = () => {
+      const newTags = tagInput.value.split(',').map(t => t.trim()).filter(Boolean);
+      item.tags = newTags;
+      updateItemElement(itemElements.get(item.id), item);
+      scheduleSave();
+    };
+  } else {
+    tagInput.value = '';
+    tagInput.oninput = null;
+  }
 }
 
 function renderColorSwatches(item) {
@@ -614,7 +647,7 @@ function renderColorSwatches(item) {
     const sw = document.createElement('button');
     sw.className = 'swatch' + (c.id === null ? ' default' : '') + ((item.bgColor || null) === c.id ? ' active' : '');
     if (c.color) sw.style.background = c.color;
-    sw.onclick = () => { item.bgColor = c.id; renderAll(); scheduleSave(); };
+    sw.onclick = () => { pushUndo(); item.bgColor = c.id; renderAll(); scheduleSave(); };
     row.appendChild(sw);
   }
 }
@@ -632,6 +665,7 @@ function attachItemHandlers(el, id) {
     if (e.target.classList.contains('handle')) return;
     e.stopPropagation();
     if (!state.selectedIds.has(id)) selectItem(id, e.shiftKey);
+    pushUndo();
     const startX = e.clientX, startY = e.clientY;
     const startPos = new Map();
     state.selectedIds.forEach(sid => { const it = state.items.find(i => i.id === sid); startPos.set(sid, {x: it.x, y: it.y}); });
@@ -643,19 +677,80 @@ function attachItemHandlers(el, id) {
       });
       renderAll();
     };
-    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); scheduleSave(); };
+    const onUp = (eu) => {
+      window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
+      const dist = Math.hypot(eu.clientX - startX, eu.clientY - startY);
+      if (dist < 5) {
+        // Click (not drag) — center the item on canvas
+        const it = state.items.find(i => i.id === id);
+        if (it) {
+          state.pan.x = window.innerWidth / 2 - it.x * state.zoom - (it.width * state.zoom) / 2;
+          state.pan.y = window.innerHeight / 2 - it.y * state.zoom - (it.height * state.zoom) / 2;
+          applyTransform();
+        }
+      }
+      scheduleSave();
+    };
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
   };
   if (el.classList.contains('text')) el.ondblclick = (e) => { e.stopPropagation(); enterTextEdit(el, id); };
 }
 
+// Measure ideal note dimensions using an inline-block probe that shrinks to fit content
+function measureNoteContent(html, font, fontSize, maxW) {
+  const probe = document.createElement('div');
+  probe.style.cssText = `position:absolute;visibility:hidden;display:inline-block;box-sizing:border-box;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word;line-height:1.4;max-width:${maxW}px;padding:14px 18px;font-family:${font};font-size:${fontSize};`;
+  probe.innerHTML = html;
+  document.body.appendChild(probe);
+  const w = probe.offsetWidth + 3; // +3 for left accent border
+  const h = probe.offsetHeight;
+  document.body.removeChild(probe);
+  return { w, h };
+}
+
 function enterTextEdit(el, id) {
   const tc = el.querySelector('.text-content'); const item = state.items.find(i => i.id === id);
+  // Clear placeholder hint so the user types into a blank note
+  const hint = tc.querySelector('.empty-hint');
+  if (hint) tc.innerHTML = '';
   tc.contentEditable = 'true'; el.classList.add('editing'); tc.focus();
+  const snapshotBeforeEdit = JSON.parse(JSON.stringify(state.items));
+  const MIN_H = 60;
+  // Auto-grow height as user types (width stays fixed during typing)
+  const onInput = () => {
+    const newH = Math.max(MIN_H, tc.scrollHeight + 32);
+    if (newH > item.height) { item.height = newH; el.style.height = newH + 'px'; }
+  };
+  tc.addEventListener('input', onInput);
+  // On paste, measure ideal width AND height using probe
+  const onPaste = () => {
+    requestAnimationFrame(() => {
+      const font = el.style.fontFamily || "'Inter Tight', sans-serif";
+      const fontSize = el.style.fontSize || '14px';
+      const size = measureNoteContent(tc.innerHTML, font, fontSize, 600);
+      const idealW = Math.max(280, size.w);
+      const idealH = Math.max(MIN_H, size.h);
+      if (idealW > item.width) { item.width = idealW; el.style.width = idealW + 'px'; }
+      if (idealH > item.height) { item.height = idealH; el.style.height = idealH + 'px'; }
+    });
+  };
+  tc.addEventListener('paste', onPaste);
   tc.onblur = () => {
     if (toolbarInteracting) return;
+    tc.removeEventListener('input', onInput);
+    tc.removeEventListener('paste', onPaste);
     tc.contentEditable = 'false'; el.classList.remove('editing');
-    item.content = tc.innerText; item.contentHtml = tc.innerHTML;
+    const newText = tc.innerText; const newHtml = tc.innerHTML;
+    if (newText !== item.content || newHtml !== item.contentHtml) {
+      undoStack.push(snapshotBeforeEdit);
+      if (undoStack.length > 50) undoStack.shift();
+    }
+    item.content = newText; item.contentHtml = newHtml;
+    // Shrink to fit on blur — probe at current width so it doesn't grow wider
+    const font = el.style.fontFamily || "'Inter Tight', sans-serif";
+    const fontSize = el.style.fontSize || '14px';
+    const size = measureNoteContent(tc.innerHTML, font, fontSize, item.width);
+    item.height = Math.max(MIN_H, size.h);
     renderAll(); scheduleSave();
   };
 }
@@ -663,7 +758,7 @@ function enterTextEdit(el, id) {
 function attachResizeHandlers(el, id) {
   el.querySelectorAll('.handle').forEach(h => {
     h.onmousedown = (e) => {
-      e.stopPropagation();
+      e.stopPropagation(); pushUndo();
       const dir = h.dataset.dir, startX = e.clientX, startY = e.clientY;
       const it = state.items.find(i => i.id === id);
       const ow = it.width, oh = it.height, ox = it.x, oy = it.y;
@@ -756,9 +851,12 @@ function isEditingField() {
 }
 
 window.addEventListener('keydown', e => {
-  if (e.code === 'Space') { isSpaceDown = true; viewport.classList.add('space-mode'); }
+  if (e.code === 'Space' && !isEditingField()) { isSpaceDown = true; viewport.classList.add('space-mode'); }
   if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !isEditingField()) {
     e.preventDefault(); performUndo();
+  }
+  if ((e.key === 'd' || e.key === 'D') && (e.metaKey || e.ctrlKey) && !isEditingField() && state.selectedIds.size > 0) {
+    e.preventDefault(); $('duplicate-btn').click();
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedIds.size > 0 && !isEditingField()) {
     pushUndo();
@@ -769,24 +867,59 @@ window.addEventListener('keyup', e => { if (e.code === 'Space') { isSpaceDown = 
 
 window.addEventListener('paste', async e => {
   if (document.activeElement.isContentEditable) return;
-  const items = e.clipboardData?.items; if (!items) return;
+  const clipItems = e.clipboardData?.items; if (!clipItems) return;
   const w = screenToWorld(mousePos.x, mousePos.y);
-  for (const it of items) {
+  let handled = false;
+  for (const it of clipItems) {
     if (it.type.startsWith('image/')) {
       const file = it.getAsFile(); if (file) handleFileAdd([file], w.x, w.y);
+      handled = true;
+    }
+  }
+  if (!handled) {
+    const text = e.clipboardData.getData('text/plain');
+    if (text) {
+      e.preventDefault();
+      pushUndo();
+      // Measure text to size the note using inline-block probe
+      const size = measureNoteContent(text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'), "'Inter Tight', sans-serif", '14px', 600);
+      const mw = Math.max(280, size.w);
+      const mh = Math.max(100, size.h);
+      const item = { id: uid(), type: 'text', x: w.x, y: w.y, width: mw, height: mh, content: text, tags: [] };
+      state.items.push(item); selectItem(item.id); renderAll(); scheduleSave();
     }
   }
 });
 
 function addText(x, y) {
-  const item = { id: uid(), type: 'text', x, y, width: 240, height: 80, content: '', tags: [] };
-  state.items.push(item); renderAll(); enterTextEdit(itemElements.get(item.id), item.id);
+  pushUndo();
+  const item = { id: uid(), type: 'text', x, y, width: 280, height: 100, content: '', tags: [] };
+  state.items.push(item); selectItem(item.id); renderAll(); enterTextEdit(itemElements.get(item.id), item.id);
+}
+
+function getImageDimensions(blob) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve({ w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve({ w: 300, h: 200 }); };
+    img.src = url;
+  });
 }
 
 async function handleFileAdd(files, sx, sy) {
+  pushUndo();
   for (const f of files) {
     const name = `img-${uid()}.png`; await storage.writeImage(name, f);
-    state.items.push({ id: uid(), type: 'image', x: sx, y: sy, width: 300, height: 200, file: name });
+    const dims = await getImageDimensions(f);
+    // Cap to max 800px on longest side, preserve aspect ratio
+    const maxDim = 800;
+    let w = dims.w, h = dims.h;
+    if (w > maxDim || h > maxDim) {
+      const scale = maxDim / Math.max(w, h);
+      w = Math.round(w * scale); h = Math.round(h * scale);
+    }
+    state.items.push({ id: uid(), type: 'image', x: sx, y: sy, width: w, height: h, naturalWidth: dims.w, naturalHeight: dims.h, file: name, tags: [] });
   }
   renderAll(); scheduleSave();
 }
@@ -803,6 +936,7 @@ $('delete-btn').onclick = () => {
 };
 $('duplicate-btn').onclick = () => {
   if (state.selectedIds.size === 0) return;
+  pushUndo();
   const newIds = [];
   state.selectedIds.forEach(sid => {
     const orig = state.items.find(i => i.id === sid); if (!orig) return;
@@ -818,7 +952,134 @@ $('duplicate-btn').onclick = () => {
 let saveTimer = null;
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(async () => { if (storage) await storage.saveCanvas(state); }, 500); }
 
-function applySearchFilter() {}
+let searchHits = [];
+let searchActiveIndex = -1;
+
+function navigateToSearchHit(idx) {
+  if (idx < 0 || idx >= searchHits.length) return;
+  searchActiveIndex = idx;
+  const item = searchHits[idx].item;
+  // Pan to the item
+  state.pan.x = window.innerWidth / 2 - item.x * state.zoom - (item.width * state.zoom) / 2;
+  state.pan.y = window.innerHeight / 2 - item.y * state.zoom - (item.height * state.zoom) / 2;
+  selectItem(item.id);
+  applyTransform();
+  scheduleSave();
+  // Update active highlight in results list
+  const rows = $('search-results-list').querySelectorAll('.search-result');
+  rows.forEach((r, i) => r.classList.toggle('active', i === idx));
+  // Scroll active row into view
+  if (rows[idx]) rows[idx].scrollIntoView({ block: 'nearest' });
+}
+
+function applySearchFilter() {
+  const query = state.searchQuery;
+  const resultsPanel = $('search-results');
+  const resultsList = $('search-results-list');
+  const resultsHeader = $('search-results-header');
+  const clearBtn = $('clear-search');
+
+  // Reset all items
+  state.items.forEach(it => {
+    const el = itemElements.get(it.id);
+    if (el) { el.classList.remove('search-hit', 'dimmed'); }
+  });
+
+  if (!query) {
+    resultsPanel.classList.remove('visible');
+    clearBtn.classList.remove('visible');
+    return;
+  }
+  clearBtn.classList.add('visible');
+
+  // Build regex — fall back to escaped literal if the pattern is invalid
+  let re;
+  try { re = new RegExp(query, 'i'); }
+  catch (e) { re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+
+  const hits = [];
+  state.items.forEach(it => {
+    let match = false;
+    let preview = '';
+    // Search note content
+    if (it.type === 'text') {
+      const text = it.content || '';
+      if (re.test(text)) { match = true; preview = text.substring(0, 80); }
+    }
+    // Search tags
+    const tags = it.tags || [];
+    if (!match && tags.some(t => re.test(t))) {
+      match = true;
+      preview = 'tags: ' + tags.join(', ');
+    }
+    // Search file name
+    if (!match && it.type === 'image' && it.file && re.test(it.file)) {
+      match = true;
+      preview = it.file;
+    }
+    if (match) hits.push({ item: it, preview });
+  });
+
+  // Dim non-matching items, highlight matches
+  state.items.forEach(it => {
+    const el = itemElements.get(it.id);
+    if (!el) return;
+    const isHit = hits.some(h => h.item.id === it.id);
+    el.classList.toggle('search-hit', isHit);
+    el.classList.toggle('dimmed', !isHit);
+  });
+
+  // Populate results dropdown
+  resultsList.innerHTML = '';
+  searchHits = hits;
+  searchActiveIndex = -1;
+  resultsHeader.textContent = hits.length + ' result' + (hits.length !== 1 ? 's' : '');
+  hits.forEach(({ item, preview }, idx) => {
+    const row = document.createElement('div');
+    row.className = 'search-result';
+    row.dataset.idx = idx;
+    const icon = item.type === 'text' ? '📝' : '🖼️';
+    row.innerHTML = `<div class="search-result-icon">${icon}</div><div class="search-result-text">${preview}</div>`;
+    row.onclick = () => { navigateToSearchHit(idx); };
+    resultsList.appendChild(row);
+  });
+  resultsPanel.classList.add('visible');
+  // Position results below search panel
+  const sp = $('search-panel').getBoundingClientRect();
+  resultsPanel.style.top = (sp.bottom + 6) + 'px';
+  resultsPanel.style.left = sp.left + 'px';
+  resultsPanel.style.width = sp.width + 'px';
+}
+
+$('search-input').addEventListener('input', (e) => {
+  state.searchQuery = e.target.value.trim();
+  applySearchFilter();
+});
+
+$('clear-search').addEventListener('click', () => {
+  $('search-input').value = '';
+  state.searchQuery = '';
+  applySearchFilter();
+});
+
+// Keyboard navigation in search
+$('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    $('search-input').value = '';
+    state.searchQuery = '';
+    applySearchFilter();
+    $('search-input').blur();
+  } else if (e.key === 'ArrowDown' && searchHits.length > 0) {
+    e.preventDefault();
+    navigateToSearchHit(searchActiveIndex < searchHits.length - 1 ? searchActiveIndex + 1 : 0);
+  } else if (e.key === 'ArrowUp' && searchHits.length > 0) {
+    e.preventDefault();
+    navigateToSearchHit(searchActiveIndex > 0 ? searchActiveIndex - 1 : searchHits.length - 1);
+  } else if (e.key === 'Enter' && searchActiveIndex >= 0) {
+    e.preventDefault();
+    navigateToSearchHit(searchActiveIndex);
+  }
+});
 
 /* ── Rich-text formatting helpers ── */
 function saveCurrentSelection() {
@@ -845,9 +1106,9 @@ function saveEditingNote() {
   $(id).addEventListener('mousedown', e => e.preventDefault());
 });
 
-// For select controls, use flag + saved selection
+// For select controls, save selection on mousedown (before blur fires) and set flag
 ['font-size', 'font-family'].forEach(id => {
-  $(id).addEventListener('focus', () => { saveCurrentSelection(); toolbarInteracting = true; });
+  $(id).addEventListener('mousedown', () => { saveCurrentSelection(); toolbarInteracting = true; });
   $(id).addEventListener('blur', () => {
     setTimeout(() => {
       if (toolbarInteracting) {
@@ -859,11 +1120,12 @@ function saveEditingNote() {
   });
 });
 
-$('fmt-bold').onclick = () => { document.execCommand('bold'); saveEditingNote(); };
-$('fmt-italic').onclick = () => { document.execCommand('italic'); saveEditingNote(); };
-$('fmt-bullet').onclick = () => { document.execCommand('insertUnorderedList'); saveEditingNote(); };
+$('fmt-bold').onclick = () => { pushUndo(); document.execCommand('bold'); saveEditingNote(); };
+$('fmt-italic').onclick = () => { pushUndo(); document.execCommand('italic'); saveEditingNote(); };
+$('fmt-bullet').onclick = () => { pushUndo(); document.execCommand('insertUnorderedList'); saveEditingNote(); };
 
 $('font-size').addEventListener('change', (e) => {
+  pushUndo();
   const size = e.target.value;
   const editingEl = document.querySelector('.item.text.editing .text-content');
   if (editingEl) {
@@ -891,6 +1153,7 @@ $('font-size').addEventListener('change', (e) => {
 });
 
 $('font-family').addEventListener('change', (e) => {
+  pushUndo();
   const family = e.target.value;
   const editingEl = document.querySelector('.item.text.editing .text-content');
   if (editingEl) {
