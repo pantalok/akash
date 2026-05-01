@@ -61,8 +61,8 @@
   @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
   .item img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 2px; box-shadow: 0 2px 8px rgba(27,26,23,0.12), 0 0 0 1px rgba(27,26,23,0.06); background: var(--surface); }
   
-  .item.text { background: var(--surface); border-radius: 3px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 18px; min-width: 80px; min-height: 32px; overflow: hidden; }
-  .item.text .text-content { outline: none; cursor: text; white-space: pre-wrap; word-wrap: break-word; line-height: 1.4; width: 100%; height: 100%; }
+  .item.text { background: var(--surface); border-radius: 3px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 18px; min-width: 80px; min-height: 32px; overflow: auto; }
+  .item.text .text-content { outline: none; cursor: text; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.4; width: 100%; height: 100%; }
   .item.text.editing { cursor: text; } .item.text.editing .text-content { user-select: text; }
   .item.text .text-content h1, .item.text .text-content h2, .item.text .text-content h3 { font-family: 'Fraunces', serif; font-weight: 500; line-height: 1.2; margin: 0 0 6px 0; letter-spacing: -0.01em; }
   .item.text .text-content h1 { font-size: 1.55em; } .item.text .text-content h2 { font-size: 1.3em; } .item.text .text-content h3 { font-size: 1.12em; }
@@ -316,6 +316,9 @@
         <div class="swatch-row" id="color-swatches"></div>
         <div class="divider"></div>
       </div>
+      <button class="btn icon-btn" id="duplicate-btn" title="Duplicate">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M10 4V2.5A1.5 1.5 0 008.5 1H2.5A1.5 1.5 0 001 2.5v6A1.5 1.5 0 002.5 10H4" stroke="currentColor" stroke-width="1.3"/></svg>
+      </button>
       <button class="btn icon-btn danger" id="delete-btn" title="Delete (Del)">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M4.5 4l.5 7a1 1 0 001 1h3a1 1 0 001-1l.5-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -444,6 +447,9 @@ class FolderStorage {
 let metaDb = null; let storage = null; let recentProjects = [];
 const state = { items: [], selectedIds: new Set(), pan: { x: 0, y: 0 }, zoom: 1, searchQuery: '' };
 const itemElements = new Map();
+let toolbarInteracting = false;
+let savedSelection = null;
+const undoStack = [];
 
 const mousePos = { x: 0, y: 0 };
 window.addEventListener('mousemove', (e) => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
@@ -647,6 +653,7 @@ function enterTextEdit(el, id) {
   const tc = el.querySelector('.text-content'); const item = state.items.find(i => i.id === id);
   tc.contentEditable = 'true'; el.classList.add('editing'); tc.focus();
   tc.onblur = () => {
+    if (toolbarInteracting) return;
     tc.contentEditable = 'false'; el.classList.remove('editing');
     item.content = tc.innerText; item.contentHtml = tc.innerHTML;
     renderAll(); scheduleSave();
@@ -662,8 +669,10 @@ function attachResizeHandlers(el, id) {
       const ow = it.width, oh = it.height, ox = it.x, oy = it.y;
       const onMove = (em) => {
         const dx = (em.clientX - startX) / state.zoom, dy = (em.clientY - startY) / state.zoom;
-        if (dir.includes('e')) it.width = Math.max(50, ow + dx);
-        if (dir.includes('s')) it.height = Math.max(30, oh + dy);
+        if (dir.includes('e')) { it.width = Math.max(50, ow + dx); }
+        if (dir.includes('w')) { it.width = Math.max(50, ow - dx); it.x = ox + (ow - it.width); }
+        if (dir.includes('s')) { it.height = Math.max(30, oh + dy); }
+        if (dir.includes('n')) { it.height = Math.max(30, oh - dy); it.y = oy + (oh - it.height); }
         renderAll();
       };
       const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); scheduleSave(); };
@@ -730,9 +739,29 @@ viewport.addEventListener('wheel', e => {
   applyTransform(); scheduleSave();
 }, { passive: false });
 
+function pushUndo() {
+  undoStack.push(JSON.parse(JSON.stringify(state.items)));
+  if (undoStack.length > 50) undoStack.shift();
+}
+function performUndo() {
+  if (undoStack.length === 0) return;
+  state.items = undoStack.pop();
+  state.selectedIds.clear();
+  renderAll(); scheduleSave();
+}
+
+function isEditingField() {
+  const el = document.activeElement;
+  return el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+}
+
 window.addEventListener('keydown', e => {
   if (e.code === 'Space') { isSpaceDown = true; viewport.classList.add('space-mode'); }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedIds.size > 0 && !document.activeElement.isContentEditable) {
+  if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !isEditingField()) {
+    e.preventDefault(); performUndo();
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedIds.size > 0 && !isEditingField()) {
+    pushUndo();
     state.items = state.items.filter(i => !state.selectedIds.has(i.id)); state.selectedIds.clear(); renderAll(); scheduleSave();
   }
 });
@@ -764,13 +793,123 @@ async function handleFileAdd(files, sx, sy) {
 
 $('upload-btn').onclick = () => $('file-input').click();
 $('add-text-btn').onclick = () => { const w = screenToWorld(window.innerWidth/2, window.innerHeight/2); addText(w.x, w.y); };
-$('clear-btn').onclick = () => { if (confirm("Clear canvas?")) { state.items = []; renderAll(); scheduleSave(); } };
+$('clear-btn').onclick = () => { if (confirm("Clear canvas?")) { pushUndo(); state.items = []; renderAll(); scheduleSave(); } };
 $('brand-btn').onclick = () => showProjectHub();
+$('delete-btn').onclick = () => {
+  if (state.selectedIds.size === 0) return;
+  pushUndo();
+  state.items = state.items.filter(i => !state.selectedIds.has(i.id));
+  state.selectedIds.clear(); renderAll(); scheduleSave();
+};
+$('duplicate-btn').onclick = () => {
+  if (state.selectedIds.size === 0) return;
+  const newIds = [];
+  state.selectedIds.forEach(sid => {
+    const orig = state.items.find(i => i.id === sid); if (!orig) return;
+    const clone = JSON.parse(JSON.stringify(orig));
+    clone.id = uid(); clone.x += clone.width + 20;
+    state.items.push(clone); newIds.push(clone.id);
+  });
+  state.selectedIds.clear();
+  newIds.forEach(id => state.selectedIds.add(id));
+  renderAll(); scheduleSave();
+};
 
 let saveTimer = null;
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(async () => { if (storage) await storage.saveCanvas(state); }, 500); }
 
-function applySearchFilter() {} 
+function applySearchFilter() {}
+
+/* ── Rich-text formatting helpers ── */
+function saveCurrentSelection() {
+  const sel = window.getSelection();
+  if (sel.rangeCount > 0) savedSelection = sel.getRangeAt(0).cloneRange();
+}
+function restoreCurrentSelection() {
+  if (savedSelection) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(savedSelection);
+    savedSelection = null;
+  }
+}
+function saveEditingNote() {
+  const editingEl = document.querySelector('.item.text.editing .text-content');
+  if (!editingEl) return;
+  const item = state.items.find(i => i.id === editingEl.closest('.item').dataset.id);
+  if (item) { item.content = editingEl.innerText; item.contentHtml = editingEl.innerHTML; scheduleSave(); }
+}
+
+// Prevent blur-exit for button-type controls
+['fmt-bold', 'fmt-italic', 'fmt-bullet'].forEach(id => {
+  $(id).addEventListener('mousedown', e => e.preventDefault());
+});
+
+// For select controls, use flag + saved selection
+['font-size', 'font-family'].forEach(id => {
+  $(id).addEventListener('focus', () => { saveCurrentSelection(); toolbarInteracting = true; });
+  $(id).addEventListener('blur', () => {
+    setTimeout(() => {
+      if (toolbarInteracting) {
+        toolbarInteracting = false;
+        const editingEl = document.querySelector('.item.text.editing .text-content');
+        if (editingEl) editingEl.focus();
+      }
+    }, 200);
+  });
+});
+
+$('fmt-bold').onclick = () => { document.execCommand('bold'); saveEditingNote(); };
+$('fmt-italic').onclick = () => { document.execCommand('italic'); saveEditingNote(); };
+$('fmt-bullet').onclick = () => { document.execCommand('insertUnorderedList'); saveEditingNote(); };
+
+$('font-size').addEventListener('change', (e) => {
+  const size = e.target.value;
+  const editingEl = document.querySelector('.item.text.editing .text-content');
+  if (editingEl) {
+    editingEl.focus();
+    restoreCurrentSelection();
+    const sel = window.getSelection();
+    if (sel.rangeCount && sel.toString().length > 0) {
+      document.execCommand('fontSize', false, '7');
+      editingEl.querySelectorAll('font[size="7"]').forEach(font => {
+        const span = document.createElement('span');
+        span.style.fontSize = size + 'px';
+        span.innerHTML = font.innerHTML;
+        font.replaceWith(span);
+      });
+    } else {
+      const item = state.items.find(i => i.id === editingEl.closest('.item').dataset.id);
+      if (item) { item.fontSize = parseInt(size); editingEl.closest('.item').style.fontSize = size + 'px'; }
+    }
+    saveEditingNote();
+  } else if (state.selectedIds.size === 1) {
+    const item = state.items.find(i => i.id === Array.from(state.selectedIds)[0]);
+    if (item && item.type === 'text') { item.fontSize = parseInt(size); renderAll(); scheduleSave(); }
+  }
+  toolbarInteracting = false;
+});
+
+$('font-family').addEventListener('change', (e) => {
+  const family = e.target.value;
+  const editingEl = document.querySelector('.item.text.editing .text-content');
+  if (editingEl) {
+    editingEl.focus();
+    restoreCurrentSelection();
+    const sel = window.getSelection();
+    if (sel.rangeCount && sel.toString().length > 0) {
+      document.execCommand('fontName', false, family);
+    } else {
+      const item = state.items.find(i => i.id === editingEl.closest('.item').dataset.id);
+      if (item) { item.fontFamily = family; editingEl.closest('.item').style.fontFamily = family; }
+    }
+    saveEditingNote();
+  } else if (state.selectedIds.size === 1) {
+    const item = state.items.find(i => i.id === Array.from(state.selectedIds)[0]);
+    if (item && item.type === 'text') { item.fontFamily = family; renderAll(); scheduleSave(); }
+  }
+  toolbarInteracting = false;
+});
 
 init();
 </script>
