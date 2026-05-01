@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src blob: data:;">
 <title>Ak@sh — Local Workspace</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -571,7 +572,7 @@ function showProjectHub() {
   } else {
     recentProjects.sort((a,b) => b.lastOpened - a.lastOpened).forEach(proj => {
       const card = document.createElement('div'); card.className = 'project-card';
-      card.innerHTML = `<div class="project-card-info"><h3>📁 ${proj.name}</h3><p>Last opened ${new Date(proj.lastOpened).toLocaleDateString()}</p></div><div class="project-card-actions"><button class="btn remove-proj-btn" data-id="${proj.id}">Remove</button></div>`;
+      card.innerHTML = `<div class="project-card-info"><h3>📁 ${escapeHtml(proj.name)}</h3><p>Last opened ${new Date(proj.lastOpened).toLocaleDateString()}</p></div><div class="project-card-actions"><button class="btn remove-proj-btn" data-id="${escapeHtml(proj.id)}">Remove</button></div>`;
       card.addEventListener('click', (e) => {
         if (e.target.classList.contains('remove-proj-btn')) { e.stopPropagation(); removeProjectFromHistory(proj.id); } 
         else { openExistingProject(proj); }
@@ -681,7 +682,7 @@ function updateItemElement(el, item) {
   el.style.left = item.x + 'px'; el.style.top = item.y + 'px';
   el.style.width = item.width + 'px'; el.style.height = item.height + 'px';
   if (item.type === 'text') {
-    if (!el.classList.contains('editing')) el.querySelector('.text-content').innerHTML = item.contentHtml || renderMarkdown(item.content);
+    if (!el.classList.contains('editing')) el.querySelector('.text-content').innerHTML = item.contentHtml ? sanitizeHtml(item.contentHtml) : renderMarkdown(item.content);
     el.style.fontFamily = item.fontFamily || "'Inter Tight', sans-serif";
     el.style.fontSize = (item.fontSize || 14) + 'px';
     const c = NOTE_COLORS.find(c => c.id === (item.bgColor || null));
@@ -696,7 +697,8 @@ function updateItemElement(el, item) {
   const tags = item.tags || [];
   if (tags.length > 0) {
     if (!tagsEl) { tagsEl = document.createElement('div'); tagsEl.className = 'item-tags'; el.appendChild(tagsEl); }
-    tagsEl.innerHTML = tags.map(t => `<span class="tag-chip">${t}</span>`).join('');
+    tagsEl.innerHTML = '';
+    tags.forEach(t => { const chip = document.createElement('span'); chip.className = 'tag-chip'; chip.textContent = t; tagsEl.appendChild(chip); });
   } else if (tagsEl) { tagsEl.remove(); }
   // Render timestamp (hidden by default, shown on hover via CSS)
   let tsEl = el.querySelector('.item-timestamp');
@@ -1012,6 +1014,31 @@ window.addEventListener('paste', async e => {
   }
 });
 
+function sanitizeHtml(html) {
+  if (!html) return html;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const dangerous = new Set(['script','iframe','object','embed','form','style','link','meta','base','svg','math','template','noscript']);
+  function clean(node) {
+    if (node.nodeType === 3) return;
+    if (node.nodeType !== 1) { node.remove(); return; }
+    if (dangerous.has(node.tagName.toLowerCase())) { node.remove(); return; }
+    Array.from(node.attributes).forEach(attr => {
+      if (attr.name.toLowerCase().startsWith('on')) node.removeAttribute(attr.name);
+    });
+    if (node.hasAttribute('href') && /^\s*javascript:/i.test(node.getAttribute('href'))) node.removeAttribute('href');
+    if (node.hasAttribute('src') && /^\s*javascript:/i.test(node.getAttribute('src'))) node.removeAttribute('src');
+    Array.from(node.childNodes).forEach(clean);
+  }
+  Array.from(doc.body.childNodes).forEach(clean);
+  return doc.body.innerHTML;
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 function timeAgo(ms) {
   if (!ms) return '';
   const diff = Date.now() - ms;
@@ -1113,7 +1140,9 @@ $('bookmarks-btn').onclick = (e) => {
       else preview = item.originalName || item.file || 'File';
       const ts = item.modifiedAt || item.createdAt;
       const tsText = ts ? timeAgo(ts) : '';
-      row.innerHTML = `<div class="search-result-icon">${icon}</div><div class="search-result-text">${preview}</div>${tsText ? '<span class="bookmark-meta">' + tsText + '</span>' : ''}`;
+      const iconDiv = document.createElement('div'); iconDiv.className = 'search-result-icon'; iconDiv.textContent = icon; row.appendChild(iconDiv);
+      const textDiv = document.createElement('div'); textDiv.className = 'search-result-text'; textDiv.textContent = preview; row.appendChild(textDiv);
+      if (tsText) { const metaSpan = document.createElement('span'); metaSpan.className = 'bookmark-meta'; metaSpan.textContent = tsText; row.appendChild(metaSpan); }
       row.onclick = () => {
         state.pan.x = window.innerWidth / 2 - item.x * state.zoom - (item.width * state.zoom) / 2;
         state.pan.y = window.innerHeight / 2 - item.y * state.zoom - (item.height * state.zoom) / 2;
@@ -1173,9 +1202,10 @@ function buildSbItem(item) {
   const row = document.createElement('div');
   row.className = 'sb-item';
   const ts = item.modifiedAt || item.createdAt;
-  const pinHtml = item.pinned ? '<span class="sb-item-pin">📌</span>' : '';
-  const timeHtml = ts ? `<span class="sb-item-time">${timeAgo(ts)}</span>` : '';
-  row.innerHTML = `<span class="sb-item-icon">${getItemIcon(item)}</span><span class="sb-item-text">${getItemPreview(item)}</span>${pinHtml}${timeHtml}`;
+  const iconSpan = document.createElement('span'); iconSpan.className = 'sb-item-icon'; iconSpan.textContent = getItemIcon(item); row.appendChild(iconSpan);
+  const textSpan = document.createElement('span'); textSpan.className = 'sb-item-text'; textSpan.textContent = getItemPreview(item); row.appendChild(textSpan);
+  if (item.pinned) { const pinSpan = document.createElement('span'); pinSpan.className = 'sb-item-pin'; pinSpan.textContent = '📌'; row.appendChild(pinSpan); }
+  if (ts) { const timeSpan = document.createElement('span'); timeSpan.className = 'sb-item-time'; timeSpan.textContent = timeAgo(ts); row.appendChild(timeSpan); }
   row.onclick = () => navigateToItem(item);
   return row;
 }
@@ -1231,7 +1261,8 @@ function renderTagsView(body, items) {
 
     const header = document.createElement('div');
     header.className = 'sb-group-header';
-    header.innerHTML = `<svg class="sb-group-arrow" viewBox="0 0 10 10" fill="none"><path d="M2 3l3 3.5L8 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sb-group-name">${tag}</span><span class="sb-group-count">${groupItems.length}</span>`;
+    header.innerHTML = `<svg class="sb-group-arrow" viewBox="0 0 10 10" fill="none"><path d="M2 3l3 3.5L8 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sb-group-name"></span><span class="sb-group-count">${groupItems.length}</span>`;
+    header.querySelector('.sb-group-name').textContent = tag;
     header.onclick = () => {
       const key = 'tag:' + tag;
       if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
@@ -1498,8 +1529,10 @@ function applySearchFilter() {
     row.className = 'search-result';
     row.dataset.idx = idx;
     const icon = item.type === 'text' ? '📝' : '🖼️';
-    const pinIcon = item.pinned ? '<span style="margin-left:4px;opacity:0.4;" title="Pinned">📌</span>' : '';
-    row.innerHTML = `<div class="search-result-icon">${icon}</div><div class="search-result-text">${preview}${pinIcon}</div>`;
+    const iconDiv = document.createElement('div'); iconDiv.className = 'search-result-icon'; iconDiv.textContent = icon; row.appendChild(iconDiv);
+    const textDiv = document.createElement('div'); textDiv.className = 'search-result-text'; textDiv.textContent = preview;
+    if (item.pinned) { const pinSpan = document.createElement('span'); pinSpan.style.cssText = 'margin-left:4px;opacity:0.4;'; pinSpan.title = 'Pinned'; pinSpan.textContent = '📌'; textDiv.appendChild(pinSpan); }
+    row.appendChild(textDiv);
     row.onclick = () => { navigateToSearchHit(idx); };
     resultsList.appendChild(row);
   });
