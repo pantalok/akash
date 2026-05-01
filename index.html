@@ -330,7 +330,7 @@
           <h5>Navigation</h5>
           <div class="help-item">
             <span class="help-label">Pan view</span>
-            <span class="help-keys"><kbd>Space</kbd>+<kbd>Drag</kbd></span>
+            <span class="help-keys"><kbd>Drag</kbd> on canvas</span>
           </div>
           <div class="help-item">
             <span class="help-label">Zoom in/out</span>
@@ -360,7 +360,7 @@
           <h5>Selection</h5>
           <div class="help-item">
             <span class="help-label">Lasso select</span>
-            <span class="help-keys"><kbd>Left Drag</kbd></span>
+            <span class="help-keys"><kbd>Shift</kbd>+<kbd>Drag</kbd></span>
           </div>
           <div class="help-item">
             <span class="help-label">Multi-select</span>
@@ -895,10 +895,8 @@ viewport.addEventListener('contextmenu', e => e.preventDefault());
 
 viewport.onmousedown = (e) => {
   if (e.target !== viewport && e.target !== world) return;
-  if (e.button === 2 || (e.button === 0 && isSpaceDown)) {
-    isPanning = true; panStart = { x: e.clientX, y: e.clientY, px: state.pan.x, py: state.pan.y };
-    viewport.classList.add('panning');
-  } else {
+  // Shift + left drag → lasso select
+  if (e.button === 0 && e.shiftKey && !isSpaceDown) {
     const startX = e.clientX, startY = e.clientY;
     const lasso = $('lasso');
     const onMove = (em) => {
@@ -914,11 +912,15 @@ viewport.onmousedown = (e) => {
       });
       updateSelectionVisuals();
     };
-    const onUp = () => { 
+    const onUp = () => {
       lasso.style.display = 'none'; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
       if (Math.hypot(startX-e.clientX, startY-e.clientY) < 5) selectItem(null);
     };
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+  } else if (e.button === 2 || e.button === 0) {
+    // Left drag or right drag or Space+drag → pan
+    isPanning = true; panStart = { x: e.clientX, y: e.clientY, px: state.pan.x, py: state.pan.y, button: e.button };
+    viewport.classList.add('panning');
   }
 };
 
@@ -931,8 +933,13 @@ window.addEventListener('mousemove', e => {
 
 window.addEventListener('mouseup', e => {
   if (isPanning) {
-    if (e.button === 2 && Math.hypot(e.clientX - panStart.x, e.clientY - panStart.y) < 5) {
-      const w = screenToWorld(e.clientX, e.clientY); addText(w.x, w.y);
+    const dist = Math.hypot(e.clientX - panStart.x, e.clientY - panStart.y);
+    if (dist < 5) {
+      if (panStart.button === 2) {
+        const w = screenToWorld(e.clientX, e.clientY); addText(w.x, w.y);
+      } else {
+        selectItem(null); // left click on empty canvas → deselect
+      }
     }
     isPanning = false; viewport.classList.remove('panning'); scheduleSave();
   }
