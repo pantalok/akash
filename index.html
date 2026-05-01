@@ -55,7 +55,8 @@
   /* Items */
   .item { position: absolute; user-select: none; cursor: grab; transition: opacity 0.18s ease; }
   .item.grabbing { cursor: grabbing; } .item.selected { z-index: 10; }
-  .item.selected::before { content: ""; position: absolute; inset: -3px; border: 1.5px solid var(--selection); border-radius: 4px; pointer-events: none; }
+  .item.selected::before { content: ""; position: absolute; inset: -4px; border: 2px solid var(--accent); border-radius: 6px; pointer-events: none; background: rgba(176, 52, 26, 0.05); }
+  .item.selected::after { content: ""; position: absolute; inset: -8px; border: 1px solid rgba(176, 52, 26, 0.2); border-radius: 8px; pointer-events: none; }
   .item.dimmed { opacity: 0.32; }
   .item.search-hit::before { content: ""; position: absolute; inset: -5px; border: 2px solid var(--accent); border-radius: 6px; pointer-events: none; animation: pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
@@ -80,7 +81,7 @@
   .item.text .text-content .cb-line input[type="checkbox"] { margin: 4px 0 0 0; cursor: pointer; accent-color: var(--ink); flex-shrink: 0; }
   .item.text .text-content .cb-line.done { color: var(--ink-faint); text-decoration: line-through; text-decoration-thickness: 1px; }
   .item.text.editing { outline: none; box-shadow: 0 0 0 2px rgba(70, 130, 200, 0.3), 0 2px 12px rgba(70, 130, 200, 0.15); }
-  .item.text.editing.selected::before { display: none; }
+  .item.text.editing.selected::before, .item.text.editing.selected::after { display: none; }
   .item.text[data-empty]:not(.editing) .text-content::before { content: "Type something..."; color: var(--ink-faint); font-style: italic; font-size: 0.92em; pointer-events: none; }
 
   .item.file, .item.link { background: var(--surface); border-radius: 6px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 16px; display: flex; align-items: center; gap: 14px; overflow: hidden; }
@@ -268,23 +269,35 @@
             <span class="help-keys"><kbd>Right Click</kbd></span>
           </div>
           <div class="help-item">
-            <span class="help-label">Paste at mouse</span>
-            <span class="help-keys"><kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+            <span class="help-label">Edit Note</span>
+            <span class="help-keys"><kbd>Double Click</kbd></span>
           </div>
           <div class="help-item">
-            <span class="help-label">Bulk Select</span>
-            <span class="help-keys"><kbd>Left Drag</kbd></span>
+            <span class="help-label">Paste at mouse</span>
+            <span class="help-keys"><kbd id="mod-paste">Ctrl</kbd>+<kbd>V</kbd></span>
           </div>
         </div>
         <div class="help-section">
           <h5>Selection</h5>
           <div class="help-item">
-            <span class="help-label">Delete Selected</span>
-            <span class="help-keys"><kbd>Del</kbd></span>
+            <span class="help-label">Lasso select</span>
+            <span class="help-keys"><kbd>Left Drag</kbd></span>
           </div>
           <div class="help-item">
             <span class="help-label">Multi-select</span>
             <span class="help-keys"><kbd>Shift</kbd>+<kbd>Click</kbd></span>
+          </div>
+          <div class="help-item">
+            <span class="help-label">Duplicate</span>
+            <span class="help-keys"><kbd id="mod-dup">Ctrl</kbd>+<kbd>D</kbd></span>
+          </div>
+          <div class="help-item">
+            <span class="help-label">Delete</span>
+            <span class="help-keys"><kbd>Del</kbd></span>
+          </div>
+          <div class="help-item">
+            <span class="help-label">Undo</span>
+            <span class="help-keys"><kbd id="mod-undo">Ctrl</kbd>+<kbd>Z</kbd></span>
           </div>
         </div>
       </div>
@@ -696,18 +709,6 @@ function attachItemHandlers(el, id) {
   if (el.classList.contains('text')) el.ondblclick = (e) => { e.stopPropagation(); enterTextEdit(el, id); };
 }
 
-// Measure ideal note dimensions using an inline-block probe that shrinks to fit content
-function measureNoteContent(html, font, fontSize, maxW) {
-  const probe = document.createElement('div');
-  probe.style.cssText = `position:absolute;visibility:hidden;display:inline-block;box-sizing:border-box;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word;line-height:1.4;max-width:${maxW}px;padding:14px 18px;font-family:${font};font-size:${fontSize};`;
-  probe.innerHTML = html;
-  document.body.appendChild(probe);
-  const w = probe.offsetWidth + 3; // +3 for left accent border
-  const h = probe.offsetHeight;
-  document.body.removeChild(probe);
-  return { w, h };
-}
-
 function enterTextEdit(el, id) {
   const tc = el.querySelector('.text-content'); const item = state.items.find(i => i.id === id);
   // Clear placeholder hint so the user types into a blank note
@@ -716,22 +717,27 @@ function enterTextEdit(el, id) {
   tc.contentEditable = 'true'; el.classList.add('editing'); tc.focus();
   const snapshotBeforeEdit = JSON.parse(JSON.stringify(state.items));
   const MIN_H = 60;
+  const MAX_W = 600;
   // Auto-grow height as user types (width stays fixed during typing)
   const onInput = () => {
     const newH = Math.max(MIN_H, tc.scrollHeight + 32);
     if (newH > item.height) { item.height = newH; el.style.height = newH + 'px'; }
   };
   tc.addEventListener('input', onInput);
-  // On paste, measure ideal width AND height using probe
+  // On paste: expand width to MAX_W, let content reflow, then fit height
   const onPaste = () => {
     requestAnimationFrame(() => {
-      const font = el.style.fontFamily || "'Inter Tight', sans-serif";
-      const fontSize = el.style.fontSize || '14px';
-      const size = measureNoteContent(tc.innerHTML, font, fontSize, 600);
-      const idealW = Math.max(280, size.w);
-      const idealH = Math.max(MIN_H, size.h);
-      if (idealW > item.width) { item.width = idealW; el.style.width = idealW + 'px'; }
-      if (idealH > item.height) { item.height = idealH; el.style.height = idealH + 'px'; }
+      // Expand to comfortable reading width
+      if (item.width < MAX_W) {
+        item.width = MAX_W;
+        el.style.width = MAX_W + 'px';
+      }
+      // Now fit height to reflowed content
+      requestAnimationFrame(() => {
+        const newH = Math.max(MIN_H, tc.scrollHeight + 32);
+        item.height = newH;
+        el.style.height = newH + 'px';
+      });
     });
   };
   tc.addEventListener('paste', onPaste);
@@ -746,11 +752,8 @@ function enterTextEdit(el, id) {
       if (undoStack.length > 50) undoStack.shift();
     }
     item.content = newText; item.contentHtml = newHtml;
-    // Shrink to fit on blur — probe at current width so it doesn't grow wider
-    const font = el.style.fontFamily || "'Inter Tight', sans-serif";
-    const fontSize = el.style.fontSize || '14px';
-    const size = measureNoteContent(tc.innerHTML, font, fontSize, item.width);
-    item.height = Math.max(MIN_H, size.h);
+    // Shrink height to fit on blur (keep width as-is)
+    item.height = Math.max(MIN_H, tc.scrollHeight + 32);
     renderAll(); scheduleSave();
   };
 }
@@ -881,12 +884,20 @@ window.addEventListener('paste', async e => {
     if (text) {
       e.preventDefault();
       pushUndo();
-      // Measure text to size the note using inline-block probe
-      const size = measureNoteContent(text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'), "'Inter Tight', sans-serif", '14px', 600);
-      const mw = Math.max(280, size.w);
-      const mh = Math.max(100, size.h);
-      const item = { id: uid(), type: 'text', x: w.x, y: w.y, width: mw, height: mh, content: text, tags: [] };
-      state.items.push(item); selectItem(item.id); renderAll(); scheduleSave();
+      // Create note at max width, then fit height after render
+      const MAX_W = 600;
+      const item = { id: uid(), type: 'text', x: w.x, y: w.y, width: MAX_W, height: 100, content: text, tags: [] };
+      state.items.push(item); selectItem(item.id); renderAll();
+      // After render, measure actual content height and fit
+      requestAnimationFrame(() => {
+        const el = itemElements.get(item.id);
+        if (el) {
+          const tc = el.querySelector('.text-content');
+          item.height = Math.max(100, tc.scrollHeight + 32);
+          el.style.height = item.height + 'px';
+        }
+        scheduleSave();
+      });
     }
   }
 });
@@ -1173,6 +1184,11 @@ $('font-family').addEventListener('change', (e) => {
   }
   toolbarInteracting = false;
 });
+
+// Show correct modifier key for Mac vs other platforms
+if (navigator.platform.includes('Mac') || navigator.userAgent.includes('Mac')) {
+  document.querySelectorAll('#mod-paste, #mod-dup, #mod-undo').forEach(el => el.textContent = 'Cmd');
+}
 
 init();
 </script>
