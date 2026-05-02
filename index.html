@@ -85,6 +85,9 @@
   .item.text.editing.selected::before, .item.text.editing.selected::after { display: none; }
   .item.text[data-empty]:not(.editing) .text-content::before { content: "Type something..."; color: var(--ink-faint); font-style: italic; font-size: 0.92em; pointer-events: none; }
 
+  .item.frame { border-radius: 12px; box-shadow: none; z-index: 0; }
+  .item:not(.frame):not(.selected) { z-index: 1; }
+
   .item.file, .item.link { background: var(--surface); border-radius: 6px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 16px; display: flex; align-items: center; gap: 14px; overflow: hidden; }
   .item.file:hover, .item.link:hover { box-shadow: 0 4px 14px rgba(27,26,23,0.14), 0 0 0 1px rgba(27,26,23,0.1); cursor: pointer; }
   .file-icon, .link-icon { font-size: 28px; flex-shrink: 0; line-height: 1; }
@@ -286,6 +289,7 @@
       <button class="btn" id="upload-btn">Add image</button>
       <button class="btn" id="upload-doc-btn">Add file</button>
       <button class="btn" id="add-text-btn">Add note</button>
+      <button class="btn" id="add-frame-btn">Add frame</button>
       <div class="divider"></div>
       <button class="btn icon-btn danger" id="clear-btn" title="Clear canvas">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M4.5 4l.5 7a1 1 0 001 1h3a1 1 0 001-1l.5-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -361,6 +365,10 @@
             <span class="help-keys">Drag from file explorer</span>
           </div>
           <div class="help-item">
+            <span class="help-label">Add Frame</span>
+            <span class="help-keys">Hold <kbd>F</kbd> + move mouse</span>
+          </div>
+          <div class="help-item">
             <span class="help-label">Open file</span>
             <span class="help-keys"><kbd>Double Click</kbd> on file</span>
           </div>
@@ -427,6 +435,10 @@
         </button>
         <div class="divider"></div>
         <div class="swatch-row" id="color-swatches"></div>
+        <div class="divider"></div>
+      </div>
+      <div id="frame-controls" style="display: none; align-items: center; gap: 4px;">
+        <div class="swatch-row" id="frame-color-swatches"></div>
         <div class="divider"></div>
       </div>
       <button class="btn icon-btn" id="pin-btn" title="Pin / Bookmark">
@@ -677,6 +689,11 @@ const NOTE_COLORS = [
   { id: 'pink', color: '#FFD6D6' }, { id: 'sage', color: '#E0F0E0' }, { id: 'sky', color: '#D6E5FF' }, { id: 'lavender', color: '#E5D6F0' }
 ];
 
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function renderAll() {
   emptyState.style.display = state.items.length === 0 ? 'block' : 'none';
   const existing = new Map(itemElements);
@@ -687,6 +704,7 @@ function renderAll() {
       if (item.type === 'image') el.appendChild(document.createElement('img'));
       else if (item.type === 'text') el.innerHTML = `<div class="text-content"></div>`;
       else if (item.type === 'file') el.innerHTML = `<div class="file-icon">${docIcon(item.originalName || item.file)}</div><div class="file-info"><div class="file-name"></div><div class="file-meta"></div></div>`;
+      // no innerHTML for frames — they're just colored divs
       world.appendChild(el); attachItemHandlers(el, item.id);
     }
     updateItemElement(el, item); itemElements.set(item.id, el); existing.delete(item.id);
@@ -707,6 +725,9 @@ function updateItemElement(el, item) {
     el.style.background = c ? c.color : '';
     if (!item.content || !item.content.trim()) el.setAttribute('data-empty', '');
     else el.removeAttribute('data-empty');
+  } else if (item.type === 'frame') {
+    const c = NOTE_COLORS.find(c => c.id === (item.bgColor || 'cream'));
+    el.style.background = c && c.color ? hexToRgba(c.color, 0.75) : 'rgba(27,26,23,0.04)';
   } else if (item.type === 'file') {
     el.querySelector('.file-name').textContent = item.originalName || item.file;
     const ext = (item.originalName || item.file || '').split('.').pop().toUpperCase();
@@ -755,7 +776,9 @@ function updateContextToolbar() {
   $('context-toolbar').classList.add('visible');
   const item = state.selectedIds.size === 1 ? state.items.find(i => i.id === Array.from(state.selectedIds)[0]) : null;
   $('text-controls').style.display = (item && item.type === 'text') ? 'inline-flex' : 'none';
+  $('frame-controls').style.display = (item && item.type === 'frame') ? 'inline-flex' : 'none';
   if (item && item.type === 'text') renderColorSwatches(item);
+  if (item && item.type === 'frame') renderFrameColorSwatches(item);
   // Populate and bind tag input
   const tagInput = $('tag-input');
   if (item) {
@@ -778,6 +801,18 @@ function renderColorSwatches(item) {
   for (const c of NOTE_COLORS) {
     const sw = document.createElement('button');
     sw.className = 'swatch' + (c.id === null ? ' default' : '') + ((item.bgColor || null) === c.id ? ' active' : '');
+    if (c.color) sw.style.background = c.color;
+    sw.onclick = () => { pushUndo(); item.bgColor = c.id; item.modifiedAt = Date.now(); renderAll(); scheduleSave(); };
+    row.appendChild(sw);
+  }
+}
+
+function renderFrameColorSwatches(item) {
+  const row = $('frame-color-swatches'); row.innerHTML = '';
+  for (const c of NOTE_COLORS) {
+    if (c.id === null) continue; // frames should always have a visible color
+    const sw = document.createElement('button');
+    sw.className = 'swatch' + ((item.bgColor || 'cream') === c.id ? ' active' : '');
     if (c.color) sw.style.background = c.color;
     sw.onclick = () => { pushUndo(); item.bgColor = c.id; item.modifiedAt = Date.now(); renderAll(); scheduleSave(); };
     row.appendChild(sw);
@@ -1045,7 +1080,44 @@ function endSpaceLasso() {
   spaceLasso = null;
 }
 
+// Frame draw: press F to start, move mouse to draw rectangle, release F to create frame
+let frameDraw = null;
+function startFrameDraw() {
+  const startX = mousePos.x, startY = mousePos.y;
+  const preview = document.createElement('div');
+  preview.style.cssText = 'position:fixed;border-radius:12px;z-index:10000;pointer-events:none;';
+  const cream = NOTE_COLORS.find(c => c.id === 'cream');
+  preview.style.background = cream ? hexToRgba(cream.color, 0.5) : 'rgba(255,244,214,0.5)';
+  document.body.appendChild(preview);
+  const onMove = () => {
+    const x = Math.min(startX, mousePos.x), y = Math.min(startY, mousePos.y);
+    const w = Math.abs(mousePos.x - startX), h = Math.abs(mousePos.y - startY);
+    preview.style.left = x + 'px'; preview.style.top = y + 'px'; preview.style.width = w + 'px'; preview.style.height = h + 'px';
+  };
+  window.addEventListener('mousemove', onMove);
+  frameDraw = { startX, startY, preview, onMove };
+}
+function endFrameDraw() {
+  if (!frameDraw) return;
+  window.removeEventListener('mousemove', frameDraw.onMove);
+  frameDraw.preview.remove();
+  const sx = frameDraw.startX, sy = frameDraw.startY;
+  const ex = mousePos.x, ey = mousePos.y;
+  frameDraw = null;
+  if (Math.hypot(ex - sx, ey - sy) < 10) return;
+  pushUndo();
+  const topLeft = screenToWorld(Math.min(sx, ex), Math.min(sy, ey));
+  const bottomRight = screenToWorld(Math.max(sx, ex), Math.max(sy, ey));
+  const item = { id: uid(), type: 'frame', x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y, bgColor: 'cream', tags: [], createdAt: Date.now(), modifiedAt: Date.now() };
+  state.items.push(item); selectItem(item.id); renderAll(); scheduleSave();
+}
+
 window.addEventListener('keydown', e => {
+  if (e.key === 'f' && !isEditingField() && !frameDraw) {
+    e.preventDefault();
+    viewport.style.cursor = 'crosshair';
+    startFrameDraw();
+  }
   if (e.code === 'Space' && !isEditingField() && !isSpaceDown) {
     e.preventDefault();
     isSpaceDown = true; viewport.classList.add('space-mode');
@@ -1064,6 +1136,10 @@ window.addEventListener('keydown', e => {
   if (e.key === '\\' && !isEditingField()) { toggleSidebar(); }
 });
 window.addEventListener('keyup', e => {
+  if (e.key === 'f' && frameDraw) {
+    viewport.style.cursor = '';
+    endFrameDraw();
+  }
   if (e.code === 'Space') {
     isSpaceDown = false; viewport.classList.remove('space-mode');
     endSpaceLasso();
@@ -1231,6 +1307,12 @@ $('doc-input').onchange = (e) => {
   e.target.value = '';
 };
 $('add-text-btn').onclick = () => { const w = screenToWorld(window.innerWidth/2, window.innerHeight/2); addText(w.x, w.y); };
+$('add-frame-btn').onclick = () => {
+  pushUndo();
+  const w = screenToWorld(window.innerWidth / 2 - 200, window.innerHeight / 2 - 150);
+  const item = { id: uid(), type: 'frame', x: w.x, y: w.y, width: 400, height: 300, bgColor: 'cream', tags: [], createdAt: Date.now(), modifiedAt: Date.now() };
+  state.items.push(item); selectItem(item.id); renderAll(); scheduleSave();
+};
 $('clear-btn').onclick = () => { if (confirm("Clear canvas?")) { pushUndo(); state.items = []; renderAll(); scheduleSave(); } };
 $('brand-btn').onclick = () => showProjectHub();
 $('delete-btn').onclick = () => {
@@ -1277,11 +1359,8 @@ $('bookmarks-btn').onclick = (e) => {
     pinned.forEach((item, idx) => {
       const row = document.createElement('div');
       row.className = 'search-result';
-      const icon = item.type === 'text' ? '📝' : '🖼️';
-      let preview = '';
-      if (item.type === 'text') preview = (item.content || '').substring(0, 60) || 'Empty note';
-      else if (item.type === 'image') preview = item.file || 'Image';
-      else preview = item.originalName || item.file || 'File';
+      const icon = getItemIcon(item);
+      const preview = getItemPreview(item);
       const ts = item.modifiedAt || item.createdAt;
       const tsText = ts ? timeAgo(ts) : '';
       const iconDiv = document.createElement('div'); iconDiv.className = 'search-result-icon'; iconDiv.textContent = icon; row.appendChild(iconDiv);
@@ -1333,12 +1412,14 @@ function navigateToItem(item) {
 function getItemPreview(item) {
   if (item.type === 'text') return (item.content || '').split('\n')[0].substring(0, 60) || 'Empty note';
   if (item.type === 'image') return item.file || 'Image';
+  if (item.type === 'frame') return 'Frame (' + (item.bgColor || 'cream') + ')';
   return item.originalName || item.file || 'File';
 }
 
 function getItemIcon(item) {
   if (item.type === 'text') return '📝';
   if (item.type === 'image') return '🖼️';
+  if (item.type === 'frame') return '⬜';
   if (item.type === 'file') return docIcon(item.originalName || item.file);
   return '📄';
 }
@@ -1364,11 +1445,13 @@ function renderSidebar() {
   const noteCount = items.filter(i => i.type === 'text').length;
   const imgCount = items.filter(i => i.type === 'image').length;
   const fileCount = items.filter(i => i.type === 'file').length;
+  const frameCount = items.filter(i => i.type === 'frame').length;
   const pinnedCount = items.filter(i => i.pinned).length;
   const parts = [];
   if (noteCount) parts.push(noteCount + ' note' + (noteCount !== 1 ? 's' : ''));
   if (imgCount) parts.push(imgCount + ' image' + (imgCount !== 1 ? 's' : ''));
   if (fileCount) parts.push(fileCount + ' file' + (fileCount !== 1 ? 's' : ''));
+  if (frameCount) parts.push(frameCount + ' frame' + (frameCount !== 1 ? 's' : ''));
   if (pinnedCount) parts.push(pinnedCount + ' pinned');
   stats.textContent = parts.join(' · ') || 'Empty canvas';
 
@@ -1646,9 +1729,7 @@ function applySearchFilter() {
 
     // If no text query but passed filters, generate a preview
     if (match && !preview) {
-      if (it.type === 'text') preview = (it.content || '').substring(0, 80) || 'Empty note';
-      else if (it.type === 'image') preview = it.file || 'Image';
-      else if (it.type === 'file') preview = it.originalName || it.file || 'File';
+      preview = getItemPreview(it);
     }
 
     if (match) hits.push({ item: it, preview });
@@ -1677,7 +1758,7 @@ function applySearchFilter() {
     const row = document.createElement('div');
     row.className = 'search-result';
     row.dataset.idx = idx;
-    const icon = item.type === 'text' ? '📝' : '🖼️';
+    const icon = getItemIcon(item);
     const iconDiv = document.createElement('div'); iconDiv.className = 'search-result-icon'; iconDiv.textContent = icon; row.appendChild(iconDiv);
     const textDiv = document.createElement('div'); textDiv.className = 'search-result-text'; textDiv.textContent = preview;
     if (item.pinned) { const pinSpan = document.createElement('span'); pinSpan.style.cssText = 'margin-left:4px;opacity:0.4;'; pinSpan.title = 'Pinned'; pinSpan.textContent = '📌'; textDiv.appendChild(pinSpan); }
