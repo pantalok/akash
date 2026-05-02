@@ -1026,6 +1026,18 @@ window.addEventListener('paste', async e => {
   }
 });
 
+// Drag & drop files onto canvas
+viewport.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+viewport.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files); if (!files.length) return;
+  const w = screenToWorld(e.clientX, e.clientY);
+  const images = files.filter(f => f.type.startsWith('image/'));
+  const docs = files.filter(f => !f.type.startsWith('image/'));
+  if (images.length) await handleFileAdd(images, w.x, w.y);
+  if (docs.length) await handleDocAdd(docs, w.x, w.y);
+});
+
 function sanitizeHtml(html) {
   if (!html) return html;
   const doc = new DOMParser().parseFromString(html, 'text/html');
