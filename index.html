@@ -86,7 +86,7 @@
   .item.text[data-empty]:not(.editing) .text-content::before { content: "Type something..."; color: var(--ink-faint); font-style: italic; font-size: 0.92em; pointer-events: none; }
 
   .item.file, .item.link { background: var(--surface); border-radius: 6px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 16px; display: flex; align-items: center; gap: 14px; overflow: hidden; }
-  .item.file:hover, .item.link:hover { box-shadow: 0 4px 14px rgba(27,26,23,0.14), 0 0 0 1px rgba(27,26,23,0.1); }
+  .item.file:hover, .item.link:hover { box-shadow: 0 4px 14px rgba(27,26,23,0.14), 0 0 0 1px rgba(27,26,23,0.1); cursor: pointer; }
   .file-icon, .link-icon { font-size: 28px; flex-shrink: 0; line-height: 1; }
   .file-info, .link-info { flex: 1; overflow: hidden; min-width: 0; }
   .file-name, .link-title { font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
@@ -284,6 +284,7 @@
       </button>
       <div class="divider"></div>
       <button class="btn" id="upload-btn">Add image</button>
+      <button class="btn" id="upload-doc-btn">Add file</button>
       <button class="btn" id="add-text-btn">Add note</button>
       <div class="divider"></div>
       <button class="btn icon-btn danger" id="clear-btn" title="Clear canvas">
@@ -433,7 +434,8 @@
   </div>
 </div>
 
-<input type="file" id="file-input" accept="image/*,application/pdf" multiple style="display:none">
+<input type="file" id="file-input" accept="image/*" multiple style="display:none">
+<input type="file" id="doc-input" accept=".pdf,.txt,.text,.doc,.docx,.md" multiple style="display:none">
 
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal" id="modal">
@@ -668,7 +670,7 @@ function renderAll() {
       el = document.createElement('div'); el.className = `item ${item.type}`; el.dataset.id = item.id;
       if (item.type === 'image') el.appendChild(document.createElement('img'));
       else if (item.type === 'text') el.innerHTML = `<div class="text-content"></div>`;
-      else if (item.type === 'file') el.innerHTML = `<div class="file-icon">📄</div><div class="file-info"><div class="file-name"></div><div class="file-meta"></div></div>`;
+      else if (item.type === 'file') el.innerHTML = `<div class="file-icon">${docIcon(item.originalName || item.file)}</div><div class="file-info"><div class="file-name"></div><div class="file-meta"></div></div>`;
       world.appendChild(el); attachItemHandlers(el, item.id);
     }
     updateItemElement(el, item); itemElements.set(item.id, el); existing.delete(item.id);
@@ -691,6 +693,8 @@ function updateItemElement(el, item) {
     else el.removeAttribute('data-empty');
   } else if (item.type === 'file') {
     el.querySelector('.file-name').textContent = item.originalName || item.file;
+    const ext = (item.originalName || item.file || '').split('.').pop().toUpperCase();
+    el.querySelector('.file-meta').textContent = ext + ' document';
   }
   // Render tag chips below item
   let tagsEl = el.querySelector('.item-tags');
@@ -812,6 +816,7 @@ function attachItemHandlers(el, id) {
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
   };
   if (el.classList.contains('text')) el.ondblclick = (e) => { e.stopPropagation(); enterTextEdit(el, id); };
+  if (el.classList.contains('file')) el.ondblclick = (e) => { e.stopPropagation(); const item = state.items.find(i => i.id === id); if (item) openFileItem(item); };
 }
 
 function enterTextEdit(el, id) {
@@ -1092,7 +1097,49 @@ async function handleFileAdd(files, sx, sy) {
   renderAll(); scheduleSave();
 }
 
+function docIcon(name) {
+  const ext = (name || '').split('.').pop().toLowerCase();
+  if (ext === 'pdf') return '📕';
+  if (ext === 'doc' || ext === 'docx') return '📘';
+  if (ext === 'md') return '📓';
+  return '📄';
+}
+
+async function handleDocAdd(files, sx, sy) {
+  pushUndo();
+  for (const f of files) {
+    const ext = (f.name || '').split('.').pop().toLowerCase();
+    const storedName = `doc-${uid()}.${ext}`;
+    await storage.writeFile(storedName, f);
+    state.items.push({ id: uid(), type: 'file', x: sx, y: sy, width: 260, height: 60, file: storedName, originalName: f.name, tags: [], pinned: false, createdAt: Date.now(), modifiedAt: Date.now() });
+    sy += 80;
+  }
+  renderAll(); scheduleSave();
+}
+
+async function openFileItem(item) {
+  if (!item || item.type !== 'file' || !item.file) return;
+  try {
+    const file = await storage.readFile(item.file);
+    const url = URL.createObjectURL(file);
+    window.open(url, '_blank');
+  } catch (e) { alert('Could not open file: ' + (item.originalName || item.file)); }
+}
+
 $('upload-btn').onclick = () => $('file-input').click();
+$('file-input').onchange = (e) => {
+  const files = Array.from(e.target.files); if (!files.length) return;
+  const w = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+  handleFileAdd(files, w.x, w.y);
+  e.target.value = '';
+};
+$('upload-doc-btn').onclick = () => $('doc-input').click();
+$('doc-input').onchange = (e) => {
+  const files = Array.from(e.target.files); if (!files.length) return;
+  const w = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+  handleDocAdd(files, w.x, w.y);
+  e.target.value = '';
+};
 $('add-text-btn').onclick = () => { const w = screenToWorld(window.innerWidth/2, window.innerHeight/2); addText(w.x, w.y); };
 $('clear-btn').onclick = () => { if (confirm("Clear canvas?")) { pushUndo(); state.items = []; renderAll(); scheduleSave(); } };
 $('brand-btn').onclick = () => showProjectHub();
@@ -1202,6 +1249,7 @@ function getItemPreview(item) {
 function getItemIcon(item) {
   if (item.type === 'text') return '📝';
   if (item.type === 'image') return '🖼️';
+  if (item.type === 'file') return docIcon(item.originalName || item.file);
   return '📄';
 }
 
@@ -1429,11 +1477,14 @@ function applySearchFilter() {
 
   // Parse timeline and special tokens from query
   let textQuery = query;
-  let afterDate = null, beforeDate = null, recentDays = null, pinnedOnly = false;
+  let afterDate = null, beforeDate = null, recentDays = null, pinnedOnly = false, filesOnly = false;
   let hasTimelineTokens = false;
 
   // Extract pinned:yes
   textQuery = textQuery.replace(/\bpinned:yes\b/gi, () => { pinnedOnly = true; return ''; });
+
+  // Extract file:yes — filter to document items only
+  textQuery = textQuery.replace(/\bfile:yes\b/gi, () => { filesOnly = true; return ''; });
 
   // Extract after:YYYY-MM-DD
   textQuery = textQuery.replace(/\bafter:(\d{4}-\d{2}-\d{2})\b/g, (_, d) => {
@@ -1467,7 +1518,8 @@ function applySearchFilter() {
 
   const hits = [];
   state.items.forEach(it => {
-    // Check pinned filter
+    // Check type filters
+    if (filesOnly && it.type !== 'file') return;
     if (pinnedOnly && !it.pinned) return;
 
     // Check timeline filters
@@ -1496,10 +1548,10 @@ function applySearchFilter() {
       match = true;
       preview = 'tags: ' + tags.join(', ');
     }
-    // Search file name
-    if (re && !match && it.type === 'image' && it.file && re.test(it.file)) {
-      match = true;
-      preview = it.file;
+    // Search file name (images and documents)
+    if (re && !match && it.file) {
+      const searchName = it.originalName || it.file;
+      if (re.test(searchName)) { match = true; preview = searchName; }
     }
 
     // If no text query but passed filters, generate a preview
