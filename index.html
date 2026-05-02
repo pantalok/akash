@@ -27,7 +27,7 @@
     -webkit-font-smoothing: antialiased;
   }
   #viewport { position: fixed; inset: 0; overflow: hidden; cursor: default; background-color: var(--bg); background-image: radial-gradient(circle at 1px 1px, rgba(27,26,23,0.08) 1px, transparent 0); background-size: 28px 28px; }
-  #viewport.panning { cursor: grabbing; } #viewport.space-mode { cursor: grab; }
+  #viewport.panning { cursor: grabbing; } #viewport.space-mode { cursor: crosshair; }
   #world { position: absolute; top: 0; left: 0; width: 0; height: 0; transform-origin: 0 0; }
   
   /* Workspace Hub */
@@ -901,7 +901,7 @@ viewport.addEventListener('contextmenu', e => e.preventDefault());
 viewport.onmousedown = (e) => {
   if (e.target !== viewport && e.target !== world) return;
   // Shift + left drag → lasso select
-  if (e.button === 0 && e.shiftKey && !isSpaceDown) {
+  if (e.button === 0 && e.shiftKey) {
     const startX = e.clientX, startY = e.clientY;
     const lasso = $('lasso');
     const onMove = (em) => {
@@ -912,18 +912,20 @@ viewport.onmousedown = (e) => {
       const rect = { l: x, t: y, r: x + w, b: y + h };
       state.items.forEach(it => {
         const sx = it.x * state.zoom + state.pan.x, sy = it.y * state.zoom + state.pan.y;
-        if (sx > rect.l && sx < rect.r && sy > rect.t && sy < rect.b) state.selectedIds.add(it.id);
+        const sw = (it.width || 200) * state.zoom, sh = (it.height || 60) * state.zoom;
+        if (sx + sw > rect.l && sx < rect.r && sy + sh > rect.t && sy < rect.b) state.selectedIds.add(it.id);
         else if (!em.shiftKey) state.selectedIds.delete(it.id);
       });
       updateSelectionVisuals();
     };
-    const onUp = () => {
-      lasso.style.display = 'none'; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
-      if (Math.hypot(startX-e.clientX, startY-e.clientY) < 5) selectItem(null);
+    const onUp = (eu) => {
+      lasso.style.display = 'none';
+      window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
+      if (Math.hypot(startX - eu.clientX, startY - eu.clientY) < 5) selectItem(null);
     };
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
   } else if (e.button === 2 || e.button === 0) {
-    // Left drag or right drag or Space+drag → pan
+    // Left drag or right drag → pan
     isPanning = true; panStart = { x: e.clientX, y: e.clientY, px: state.pan.x, py: state.pan.y, button: e.button };
     viewport.classList.add('panning');
   }
@@ -976,8 +978,63 @@ function isEditingField() {
   return el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
 }
 
+// Space-hold lasso: press Space to start selection at cursor, move mouse to draw rectangle, release Space to finalize
+let spaceLasso = null;
+function startSpaceLasso() {
+  const startX = mousePos.x, startY = mousePos.y;
+  const lasso = $('lasso');
+  let panOffsetX = 0, panOffsetY = 0, edgeScrollId = null;
+  const EDGE = 50, SPEED = 12;
+  const updateLasso = () => {
+    const mx = mousePos.x + panOffsetX, my = mousePos.y + panOffsetY;
+    lasso.style.display = 'block';
+    const x = Math.min(startX, mx), y = Math.min(startY, my);
+    const w = Math.abs(mx - startX), h = Math.abs(my - startY);
+    lasso.style.left = x + 'px'; lasso.style.top = y + 'px'; lasso.style.width = w + 'px'; lasso.style.height = h + 'px';
+    const rect = { l: x, t: y, r: x + w, b: y + h };
+    state.items.forEach(it => {
+      const sx = it.x * state.zoom + state.pan.x, sy = it.y * state.zoom + state.pan.y;
+      const sw = (it.width || 200) * state.zoom, sh = (it.height || 60) * state.zoom;
+      if (sx + sw > rect.l && sx < rect.r && sy + sh > rect.t && sy < rect.b) state.selectedIds.add(it.id);
+      else state.selectedIds.delete(it.id);
+    });
+    updateSelectionVisuals();
+  };
+  const edgeScroll = () => {
+    if (!spaceLasso) return;
+    const mx = mousePos.x, my = mousePos.y;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let dx = 0, dy = 0;
+    if (mx < EDGE) dx = SPEED; else if (mx > vw - EDGE) dx = -SPEED;
+    if (my < EDGE) dy = SPEED; else if (my > vh - EDGE) dy = -SPEED;
+    if (dx || dy) {
+      state.pan.x += dx; state.pan.y += dy;
+      panOffsetX -= dx; panOffsetY -= dy;
+      applyTransform(); updateLasso();
+    }
+    edgeScrollId = requestAnimationFrame(edgeScroll);
+  };
+  edgeScrollId = requestAnimationFrame(edgeScroll);
+  const onMove = () => { panOffsetX = 0; panOffsetY = 0; updateLasso(); };
+  window.addEventListener('mousemove', onMove);
+  spaceLasso = { startX, startY, onMove, edgeScrollId, lasso };
+}
+function endSpaceLasso() {
+  if (!spaceLasso) return;
+  spaceLasso.lasso.style.display = 'none';
+  if (spaceLasso.edgeScrollId) cancelAnimationFrame(spaceLasso.edgeScrollId);
+  window.removeEventListener('mousemove', spaceLasso.onMove);
+  // If barely moved, treat as deselect click
+  if (Math.hypot(spaceLasso.startX - mousePos.x, spaceLasso.startY - mousePos.y) < 5) selectItem(null);
+  spaceLasso = null;
+}
+
 window.addEventListener('keydown', e => {
-  if (e.code === 'Space' && !isEditingField()) { isSpaceDown = true; viewport.classList.add('space-mode'); }
+  if (e.code === 'Space' && !isEditingField() && !isSpaceDown) {
+    e.preventDefault();
+    isSpaceDown = true; viewport.classList.add('space-mode');
+    startSpaceLasso();
+  }
   if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !isEditingField()) {
     e.preventDefault(); performUndo();
   }
@@ -990,7 +1047,12 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === '\\' && !isEditingField()) { toggleSidebar(); }
 });
-window.addEventListener('keyup', e => { if (e.code === 'Space') { isSpaceDown = false; viewport.classList.remove('space-mode'); }});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    isSpaceDown = false; viewport.classList.remove('space-mode');
+    endSpaceLasso();
+  }
+});
 
 window.addEventListener('paste', async e => {
   if (document.activeElement.isContentEditable) return;
