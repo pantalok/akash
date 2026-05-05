@@ -90,6 +90,15 @@
   .item .lock-icon { position: absolute; top: 8px; right: 8px; pointer-events: none; opacity: 0.5; line-height: 1; font-size: 16px; }
   .item.in-locked-frame { cursor: default; pointer-events: none; }
   .item:not(.frame):not(.selected) { z-index: 1; }
+  .note-badge { position: absolute; bottom: 6px; right: 6px; width: 20px; height: 20px; background: rgba(27,26,23,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; opacity: 0.7; transition: opacity 0.15s; font-size: 10px; color: #fff; }
+  .note-badge:hover { opacity: 1; }
+  .linked-badge { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; background: rgba(27,26,23,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; opacity: 0.6; transition: opacity 0.15s; font-size: 9px; color: #fff; }
+  .linked-badge:hover { opacity: 1; }
+  .item.text.collapsed { overflow: hidden; }
+  .item.text.collapsed .text-content { max-height: 1.6em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .snap-guide { position: absolute; background: rgba(220, 60, 60, 0.6); z-index: 9999; pointer-events: none; }
+  .snap-guide.horizontal { height: 1px; left: 0; right: 0; }
+  .snap-guide.vertical { width: 1px; top: 0; bottom: 0; }
 
   #frame-context-menu { position: fixed; z-index: 10001; background: var(--surface); border-radius: 8px; box-shadow: var(--shadow-lg); padding: 4px; display: none; min-width: 160px; }
   #frame-context-menu.visible { display: block; }
@@ -361,11 +370,15 @@
           <h5>Creation</h5>
           <div class="help-item">
             <span class="help-label">Add Note</span>
-            <span class="help-keys"><kbd>Right Click</kbd></span>
+            <span class="help-keys"><kbd>Double Click</kbd> or <kbd>Right Click</kbd></span>
+          </div>
+          <div class="help-item">
+            <span class="help-label">Quick Note</span>
+            <span class="help-keys"><kbd>N</kbd></span>
           </div>
           <div class="help-item">
             <span class="help-label">Edit Note</span>
-            <span class="help-keys"><kbd>Double Click</kbd></span>
+            <span class="help-keys"><kbd>Double Click</kbd> on note</span>
           </div>
           <div class="help-item">
             <span class="help-label">Paste at mouse</span>
@@ -489,6 +502,9 @@
     <button id="item-note-btn" style="display:none"></button>
     <button id="delete-images-btn" style="display:none"></button>
     <button id="delete-notes-btn" style="display:none"></button>
+    <button id="bulk-tag-btn" style="display:none"></button>
+    <button id="bulk-color-btn" style="display:none"></button>
+    <button id="bulk-collapse-btn" style="display:none"></button>
   </div>
 </div>
 
@@ -763,6 +779,8 @@ function updateItemElement(el, item) {
     el.style.background = c ? c.color : '';
     if (!item.content || !item.content.trim()) el.setAttribute('data-empty', '');
     else el.removeAttribute('data-empty');
+    el.classList.toggle('collapsed', !!item.collapsed);
+    if (item.collapsed) el.style.height = '36px';
   } else if (item.type === 'frame') {
     const c = NOTE_COLORS.find(c => c.id === (item.bgColor || 'cream'));
     el.style.background = c && c.color ? hexToRgba(c.color, 0.75) : 'rgba(27,26,23,0.04)';
@@ -777,6 +795,18 @@ function updateItemElement(el, item) {
     if (!lockEl) { lockEl = document.createElement('div'); lockEl.className = 'lock-icon'; el.appendChild(lockEl); }
     lockEl.textContent = '\u{1F512}';
   } else if (lockEl) { lockEl.remove(); }
+  // Note badge on images that have a linked note
+  let noteBadge = el.querySelector('.note-badge');
+  if (item.type === 'image' && item.noteItemId && state.items.find(i => i.id === item.noteItemId)) {
+    if (!noteBadge) { noteBadge = document.createElement('div'); noteBadge.className = 'note-badge'; noteBadge.textContent = '\u{1F4AC}'; el.appendChild(noteBadge); }
+    noteBadge.onclick = (e) => { e.stopPropagation(); selectItem(item.noteItemId); renderAll(); const nel = itemElements.get(item.noteItemId); if (nel) enterTextEdit(nel, item.noteItemId); };
+  } else if (noteBadge) { noteBadge.remove(); }
+  // Linked badge on notes that are linked to an image
+  let linkedBadge = el.querySelector('.linked-badge');
+  if (item.type === 'text' && item.linkedImageId && state.items.find(i => i.id === item.linkedImageId)) {
+    if (!linkedBadge) { linkedBadge = document.createElement('div'); linkedBadge.className = 'linked-badge'; linkedBadge.textContent = '\u{1F5BC}'; el.appendChild(linkedBadge); }
+    linkedBadge.onclick = (e) => { e.stopPropagation(); selectItem(item.linkedImageId); renderAll(); };
+  } else if (linkedBadge) { linkedBadge.remove(); }
   // Render tag chips below item
   let tagsEl = el.querySelector('.item-tags');
   const tags = item.tags || [];
@@ -1034,6 +1064,62 @@ function showItemContextMenu(x, y, item) {
     deleteNotesBtn.style.display = 'none';
   }
 
+  // Bulk tag button (multi-selection)
+  const bulkTagBtn = $('bulk-tag-btn');
+  if (targetItems.length > 1) {
+    bulkTagBtn.textContent = 'Tag All (' + targetItems.length + ')';
+    bulkTagBtn.style.display = '';
+    bulkTagBtn.onclick = () => {
+      menu.classList.remove('visible');
+      const tag = prompt('Add tag to all selected items:');
+      if (!tag || !tag.trim()) return;
+      pushUndo();
+      const t = tag.trim();
+      targetItems.forEach(i => { if (!i.tags) i.tags = []; if (!i.tags.includes(t)) i.tags.push(t); i.modifiedAt = Date.now(); });
+      renderAll(); scheduleSave();
+    };
+  } else {
+    bulkTagBtn.style.display = 'none';
+  }
+
+  // Bulk color button (multi-selection, text/frame items)
+  const bulkColorBtn = $('bulk-color-btn');
+  const colorableItems = targetItems.filter(i => i.type === 'text' || i.type === 'frame');
+  if (colorableItems.length > 1) {
+    bulkColorBtn.textContent = 'Set Color (' + colorableItems.length + ')';
+    bulkColorBtn.style.display = '';
+    bulkColorBtn.onclick = () => {
+      menu.classList.remove('visible');
+      const colors = ['cream', 'peach', 'pink', 'sage', 'sky', 'lavender'];
+      const choice = prompt('Color: ' + colors.join(', ') + ' (or "none")');
+      if (choice === null) return;
+      pushUndo();
+      const c = colors.includes(choice.trim()) ? choice.trim() : null;
+      colorableItems.forEach(i => { i.bgColor = c; i.modifiedAt = Date.now(); });
+      renderAll(); scheduleSave();
+    };
+  } else {
+    bulkColorBtn.style.display = 'none';
+  }
+
+  // Collapse/Expand notes button (multi-selection with text items)
+  const bulkCollapseBtn = $('bulk-collapse-btn');
+  const textItems = targetItems.filter(i => i.type === 'text' && i.content && i.content.trim());
+  if (textItems.length > 0) {
+    const allCollapsed = textItems.every(i => i.collapsed);
+    bulkCollapseBtn.textContent = allCollapsed ? 'Expand Notes' : 'Collapse Notes';
+    bulkCollapseBtn.style.display = '';
+    bulkCollapseBtn.onclick = () => {
+      menu.classList.remove('visible');
+      pushUndo();
+      const newState = !allCollapsed;
+      textItems.forEach(i => { i.collapsed = newState; i.modifiedAt = Date.now(); });
+      renderAll(); scheduleSave();
+    };
+  } else {
+    bulkCollapseBtn.style.display = 'none';
+  }
+
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
   menu.classList.add('visible');
@@ -1073,8 +1159,34 @@ function attachItemHandlers(el, id) {
       startPos.set(sid, {x: it.x, y: it.y});
       if (!isItemInLockedFrame(sid)) movableIds.add(sid);
     });
+    const SNAP_THRESH = 6;
     const onMove = (em) => {
-      const dx = (em.clientX - startX) / state.zoom, dy = (em.clientY - startY) / state.zoom;
+      let dx = (em.clientX - startX) / state.zoom, dy = (em.clientY - startY) / state.zoom;
+      // Snap alignment guides
+      clearSnapGuides();
+      if (movableIds.size === 1) {
+        const it = state.items.find(i => i.id === Array.from(movableIds)[0]);
+        const nx = startPos.get(it.id).x + dx, ny = startPos.get(it.id).y + dy;
+        const nw = it.width, nh = it.height;
+        const edges = { l: nx, cx: nx + nw / 2, r: nx + nw, t: ny, cy: ny + nh / 2, b: ny + nh };
+        let snapX = null, snapY = null;
+        for (const other of state.items) {
+          if (movableIds.has(other.id) || other.type === 'frame') continue;
+          const oe = { l: other.x, cx: other.x + (other.width || 200) / 2, r: other.x + (other.width || 200), t: other.y, cy: other.y + (other.height || 60) / 2, b: other.y + (other.height || 60) };
+          for (const [ek, ev] of [['l', edges.l], ['cx', edges.cx], ['r', edges.r]]) {
+            for (const [ok, ov] of [['l', oe.l], ['cx', oe.cx], ['r', oe.r]]) {
+              if (Math.abs(ev - ov) < SNAP_THRESH && snapX === null) { snapX = ov - (ev - nx); showSnapGuide('vertical', ov); }
+            }
+          }
+          for (const [ek, ev] of [['t', edges.t], ['cy', edges.cy], ['b', edges.b]]) {
+            for (const [ok, ov] of [['t', oe.t], ['cy', oe.cy], ['b', oe.b]]) {
+              if (Math.abs(ev - ov) < SNAP_THRESH && snapY === null) { snapY = ov - (ev - ny); showSnapGuide('horizontal', ov); }
+            }
+          }
+        }
+        if (snapX !== null) dx = snapX - startPos.get(it.id).x;
+        if (snapY !== null) dy = snapY - startPos.get(it.id).y;
+      }
       movableIds.forEach(sid => {
         const it = state.items.find(i => i.id === sid);
         it.x = startPos.get(sid).x + dx; it.y = startPos.get(sid).y + dy;
@@ -1082,6 +1194,7 @@ function attachItemHandlers(el, id) {
       renderAll();
     };
     const onUp = (eu) => {
+      clearSnapGuides();
       window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
       const dist = Math.hypot(eu.clientX - startX, eu.clientY - startY);
       if (dist < 5) {
@@ -1160,6 +1273,17 @@ function enterTextEdit(el, id) {
       item.modifiedAt = Date.now();
     }
     item.content = newText; item.contentHtml = newHtml;
+    // Remove empty notes on blur (auto-cleanup)
+    if (!newText || !newText.trim()) {
+      const idx = state.items.indexOf(item);
+      if (idx !== -1) {
+        // Clear linked reference if this was a linked note
+        if (item.linkedImageId) { const img = state.items.find(p => p.id === item.linkedImageId); if (img) delete img.noteItemId; }
+        state.items.splice(idx, 1);
+        state.selectedIds.delete(item.id);
+        renderAll(); scheduleSave(); return;
+      }
+    }
     // Shrink height to fit on blur (keep width as-is)
     item.height = Math.max(MIN_H, tc.scrollHeight + 32);
     renderAll(); scheduleSave();
@@ -1228,6 +1352,12 @@ function attachResizeHandlers(el, id) {
 
 let isPanning = false, isSpaceDown = false, panStart = null;
 viewport.addEventListener('contextmenu', e => e.preventDefault());
+
+viewport.ondblclick = (e) => {
+  if (e.target !== viewport && e.target !== world) return;
+  const w = screenToWorld(e.clientX, e.clientY);
+  if (!isPointInLockedFrame(w.x, w.y)) addText(w.x, w.y);
+};
 
 viewport.onmousedown = (e) => {
   if (e.target !== viewport && e.target !== world) return;
@@ -1429,6 +1559,10 @@ window.addEventListener('keydown', e => {
     state.items = state.items.filter(i => !deleteSet.has(i.id)); state.selectedIds.clear(); renderAll(); scheduleSave();
   }
   if (e.key === '\\' && !isEditingField()) { toggleSidebar(); }
+  if (e.key === 'n' && !isEditingField() && !e.metaKey && !e.ctrlKey) {
+    const w = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+    addText(w.x, w.y);
+  }
 });
 window.addEventListener('keyup', e => {
   if (e.key === 'f' && frameDraw) {
@@ -1524,6 +1658,15 @@ function timeAgo(ms) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return months[d.getMonth()] + ' ' + d.getDate();
 }
+
+function showSnapGuide(orientation, pos) {
+  const guide = document.createElement('div');
+  guide.className = 'snap-guide ' + orientation;
+  if (orientation === 'horizontal') guide.style.top = pos + 'px';
+  else guide.style.left = pos + 'px';
+  world.appendChild(guide);
+}
+function clearSnapGuides() { world.querySelectorAll('.snap-guide').forEach(g => g.remove()); }
 
 function addText(x, y) {
   pushUndo();
