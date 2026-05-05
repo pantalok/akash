@@ -105,6 +105,10 @@
   #frame-context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink); text-align: left; }
   #frame-context-menu button:hover { background: rgba(27,26,23,0.06); }
 
+  #tidy-menu { position: fixed; z-index: 10001; background: var(--surface); border-radius: 8px; box-shadow: var(--shadow-lg); padding: 4px; display: none; min-width: 180px; }
+  #tidy-menu.visible { display: block; }
+  #tidy-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink); text-align: left; }
+  #tidy-menu button:hover { background: rgba(27,26,23,0.06); }
 
   .item.file, .item.link { background: var(--surface); border-radius: 6px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 16px; display: flex; align-items: center; gap: 14px; overflow: hidden; }
   .item.file:hover, .item.link:hover { box-shadow: 0 4px 14px rgba(27,26,23,0.14), 0 0 0 1px rgba(27,26,23,0.1); cursor: pointer; }
@@ -311,6 +315,7 @@
       <button class="btn" id="add-text-btn">Add note</button>
       <button class="btn" id="add-frame-btn">Add frame</button>
       <div class="divider"></div>
+      <button class="btn" id="tidy-btn" title="Tidy canvas">Tidy</button>
       <button class="btn icon-btn danger" id="clear-btn" title="Clear canvas">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M4.5 4l.5 7a1 1 0 001 1h3a1 1 0 001-1l.5-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -505,6 +510,10 @@
     <button id="bulk-tag-btn" style="display:none"></button>
     <button id="bulk-color-btn" style="display:none"></button>
     <button id="bulk-collapse-btn" style="display:none"></button>
+  </div>
+  <div id="tidy-menu">
+    <button id="tidy-remove-empty">Remove empty notes</button>
+    <button id="tidy-fit-notes">Fit notes to content</button>
   </div>
 </div>
 
@@ -1284,8 +1293,29 @@ function enterTextEdit(el, id) {
         renderAll(); scheduleSave(); return;
       }
     }
-    // Shrink height to fit on blur (keep width as-is)
+    // Trim trailing blank lines from content
+    const trimmedText = (newText || '').replace(/[\n\s]+$/, '');
+    item.content = trimmedText;
+    // Strip trailing empty elements from HTML
+    let html = tc.innerHTML;
+    html = html.replace(/(<br\s*\/?>|\s|<div><br\s*\/?><\/div>|<p><br\s*\/?><\/p>)+$/gi, '');
+    tc.innerHTML = html;
+    item.contentHtml = html;
+    // Auto-fit width for short text
+    const lines = trimmedText.split('\n');
+    const longestLine = Math.max(...lines.map(l => l.length));
+    const charWidth = (item.fontSize || 14) * 0.6;
+    const textWidth = longestLine * charWidth + 36;
+    if (textWidth < item.width && lines.length <= 3) {
+      item.width = Math.max(120, Math.min(item.width, textWidth));
+      el.style.width = item.width + 'px';
+    }
+    // Collapse height to measure true content height
+    el.style.height = '0px';
+    tc.style.height = 'auto';
     item.height = Math.max(MIN_H, tc.scrollHeight + 32);
+    el.style.height = item.height + 'px';
+    tc.style.height = '';
     renderAll(); scheduleSave();
   };
 }
@@ -1752,6 +1782,55 @@ $('add-frame-btn').onclick = () => {
   state.items.push(item); selectItem(item.id); renderAll(); scheduleSave();
 };
 $('clear-btn').onclick = () => { if (confirm("Clear canvas?")) { pushUndo(); state.items = []; renderAll(); scheduleSave(); } };
+
+// Tidy menu
+$('tidy-btn').onclick = (e) => {
+  const menu = $('tidy-menu');
+  if (menu.classList.contains('visible')) { menu.classList.remove('visible'); return; }
+  const rect = e.target.getBoundingClientRect();
+  menu.style.left = rect.left + 'px';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.classList.add('visible');
+  const close = (ev) => { if (!menu.contains(ev.target) && ev.target !== e.target) { menu.classList.remove('visible'); document.removeEventListener('mousedown', close); } };
+  setTimeout(() => document.addEventListener('mousedown', close), 0);
+};
+
+$('tidy-remove-empty').onclick = () => {
+  $('tidy-menu').classList.remove('visible');
+  const empties = state.items.filter(i => i.type === 'text' && (!i.content || !i.content.trim()));
+  if (empties.length === 0) { alert('No empty notes found.'); return; }
+  if (!confirm('Remove ' + empties.length + ' empty note' + (empties.length !== 1 ? 's' : '') + '?')) return;
+  pushUndo();
+  const deleteSet = new Set(empties.map(i => i.id));
+  // Clear linked references
+  state.items.forEach(i => { if (deleteSet.has(i.id) && i.linkedImageId) { const img = state.items.find(p => p.id === i.linkedImageId); if (img) delete img.noteItemId; } });
+  state.items = state.items.filter(i => !deleteSet.has(i.id));
+  state.selectedIds.forEach(id => { if (deleteSet.has(id)) state.selectedIds.delete(id); });
+  renderAll(); scheduleSave();
+};
+
+$('tidy-fit-notes').onclick = () => {
+  $('tidy-menu').classList.remove('visible');
+  const notes = state.items.filter(i => i.type === 'text' && i.content && i.content.trim());
+  if (notes.length === 0) { alert('No notes to fit.'); return; }
+  pushUndo();
+  // Use actual DOM elements for accurate measurement
+  notes.forEach(item => {
+    const el = itemElements.get(item.id);
+    if (!el) return;
+    const tc = el.querySelector('.text-content');
+    if (!tc) return;
+    // Temporarily collapse to measure true content size
+    el.style.width = 'max-content';
+    el.style.height = '0px';
+    const idealW = Math.min(600, Math.max(120, el.scrollWidth));
+    el.style.width = idealW + 'px';
+    const idealH = Math.max(60, tc.scrollHeight + 32);
+    item.width = idealW;
+    item.height = idealH;
+  });
+  renderAll(); scheduleSave();
+};
 $('brand-btn').onclick = () => { window.open(location.href, '_blank'); };
 $('delete-btn').onclick = () => {
   if (state.selectedIds.size === 0) return;
