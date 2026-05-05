@@ -86,8 +86,8 @@
   .item.text[data-empty]:not(.editing) .text-content::before { content: "Type something..."; color: var(--ink-faint); font-style: italic; font-size: 0.92em; pointer-events: none; }
 
   .item.frame { border-radius: 12px; box-shadow: none; z-index: 0; }
-  .item.frame.locked { cursor: default; }
-  .item.frame .lock-icon { position: absolute; top: 8px; right: 8px; pointer-events: none; opacity: 0.5; line-height: 1; font-size: 16px; }
+  .item.locked { cursor: default; }
+  .item .lock-icon { position: absolute; top: 8px; right: 8px; pointer-events: none; opacity: 0.5; line-height: 1; font-size: 16px; }
   .item.in-locked-frame { cursor: default; pointer-events: none; }
   .item:not(.frame):not(.selected) { z-index: 1; }
 
@@ -387,7 +387,7 @@
           <h5>Frames</h5>
           <div class="help-item">
             <span class="help-label">Lock / Unlock</span>
-            <span class="help-keys"><kbd>Right Click</kbd> on frame</span>
+            <span class="help-keys"><kbd>Right Click</kbd> on item</span>
           </div>
           <div class="help-item">
             <span class="help-label">Scale contents</span>
@@ -740,8 +740,8 @@ function renderAll() {
   // Apply locked state classes
   for (const item of state.items) {
     const el = itemElements.get(item.id); if (!el) continue;
-    if (item.type === 'frame') { el.classList.toggle('locked', !!item.locked); }
-    else { el.classList.toggle('in-locked-frame', isItemInLockedFrame(item.id)); }
+    el.classList.toggle('locked', !!item.locked);
+    el.classList.toggle('in-locked-frame', !item.locked && isContainedInLockedFrame(item.id));
   }
   updateSelectionVisuals(); applyTransform(); updateContextToolbar(); applySearchFilter();
   if ($('sidebar').classList.contains('visible')) renderSidebar();
@@ -761,17 +761,17 @@ function updateItemElement(el, item) {
   } else if (item.type === 'frame') {
     const c = NOTE_COLORS.find(c => c.id === (item.bgColor || 'cream'));
     el.style.background = c && c.color ? hexToRgba(c.color, 0.75) : 'rgba(27,26,23,0.04)';
-    // Lock icon
-    let lockEl = el.querySelector('.lock-icon');
-    if (item.locked) {
-      if (!lockEl) { lockEl = document.createElement('div'); lockEl.className = 'lock-icon'; el.appendChild(lockEl); }
-      lockEl.textContent = '\u{1F512}';
-    } else if (lockEl) { lockEl.remove(); }
   } else if (item.type === 'file') {
     el.querySelector('.file-name').textContent = item.originalName || item.file;
     const ext = (item.originalName || item.file || '').split('.').pop().toUpperCase();
     el.querySelector('.file-meta').textContent = ext + ' document';
   }
+  // Lock icon
+  let lockEl = el.querySelector('.lock-icon');
+  if (item.locked) {
+    if (!lockEl) { lockEl = document.createElement('div'); lockEl.className = 'lock-icon'; el.appendChild(lockEl); }
+    lockEl.textContent = '\u{1F512}';
+  } else if (lockEl) { lockEl.remove(); }
   // Render tag chips below item
   let tagsEl = el.querySelector('.item-tags');
   const tags = item.tags || [];
@@ -867,15 +867,21 @@ function selectItem(id, multi = false) {
   updateSelectionVisuals(); updateContextToolbar();
 }
 
-function isItemInLockedFrame(itemId) {
+function isContainedInLockedFrame(itemId) {
   const item = state.items.find(i => i.id === itemId);
   if (!item) return false;
-  if (item.type === 'frame' && item.locked) return true;
   return state.items.some(f => {
     if (f.type !== 'frame' || !f.locked || f.id === itemId) return false;
     return item.x >= f.x && item.x + item.width <= f.x + f.width &&
            item.y >= f.y && item.y + item.height <= f.y + f.height;
   });
+}
+
+function isItemInLockedFrame(itemId) {
+  const item = state.items.find(i => i.id === itemId);
+  if (!item) return false;
+  if (item.locked) return true;
+  return isContainedInLockedFrame(itemId);
 }
 
 function isPointInLockedFrame(wx, wy) {
@@ -885,10 +891,10 @@ function isPointInLockedFrame(wx, wy) {
   });
 }
 
-function showFrameContextMenu(x, y, item) {
+function showItemContextMenu(x, y, item) {
   const menu = $('frame-context-menu');
   const btn = $('frame-lock-btn');
-  btn.textContent = item.locked ? 'Unlock Frame' : 'Lock Frame';
+  btn.textContent = item.locked ? 'Unlock' : 'Lock';
   btn.onclick = () => {
     pushUndo();
     item.locked = !item.locked;
@@ -917,9 +923,9 @@ function attachItemHandlers(el, id) {
   el.onmousedown = (e) => {
     if (el.classList.contains('editing')) return;
     if (e.target.classList.contains('handle')) return;
-    // Locked frame: left-click → pan canvas, right-click → contextmenu handles it
+    // Locked item: left-click → pan canvas, right-click → contextmenu handles it
     const _item = state.items.find(i => i.id === id);
-    if (_item && _item.type === 'frame' && _item.locked) {
+    if (_item && _item.locked) {
       if (e.button === 0) {
         isPanning = true;
         panStart = { x: e.clientX, y: e.clientY, px: state.pan.x, py: state.pan.y, button: e.button };
@@ -971,13 +977,14 @@ function attachItemHandlers(el, id) {
     };
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
   };
-  // Right-click context menu for frames
+  // Right-click context menu for lock/unlock
   el.addEventListener('contextmenu', (e) => {
+    if (el.classList.contains('editing')) return;
     const item = state.items.find(i => i.id === id);
-    if (!item || item.type !== 'frame') return;
+    if (!item) return;
     e.preventDefault();
     e.stopPropagation();
-    showFrameContextMenu(e.clientX, e.clientY, item);
+    showItemContextMenu(e.clientX, e.clientY, item);
   });
   if (el.classList.contains('text')) el.ondblclick = (e) => { e.stopPropagation(); if (isItemInLockedFrame(id)) return; enterTextEdit(el, id); };
   if (el.classList.contains('file')) el.ondblclick = (e) => { e.stopPropagation(); const item = state.items.find(i => i.id === id); if (item) openFileItem(item); };
