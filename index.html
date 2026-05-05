@@ -166,6 +166,7 @@
   .brand { padding: 4px 18px 4px 14px; font-family: 'Fraunces', serif; font-style: italic; font-weight: 400; font-size: 24px; letter-spacing: -0.02em; color: var(--ink); border-right: 1px solid var(--line); margin-right: 4px; cursor: pointer; transition: opacity 0.15s;}
   .brand:hover { opacity: 0.7; }
   .brand sup { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-style: normal; color: var(--ink-faint); margin-left: 6px; letter-spacing: 0.1em; text-transform: uppercase; vertical-align: super; }
+  .workspace-name { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faint); letter-spacing: 0.02em; padding: 0 10px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #search-panel { flex: 1; max-width: 540px; min-width: 240px; }
   #search { flex: 1; display: flex; align-items: center; padding: 4px 14px; gap: 10px; }
   #search svg { flex-shrink: 0; opacity: 0.4; }
@@ -275,7 +276,8 @@
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3h10M2 7h6M2 11h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
       </button>
       <div class="divider"></div>
-      <div class="brand" id="brand-btn" title="Back to Workspaces">Ak@sh <sup>local</sup></div>
+      <div class="brand" id="brand-btn" title="Open new workspace tab">Ak@sh <sup>local</sup></div>
+      <span class="workspace-name" id="workspace-name"></span>
     </div>
     <div class="panel" id="search-panel">
       <div id="search">
@@ -619,6 +621,7 @@ async function init() {
 
 function showProjectHub() {
   appUI.style.display = 'none'; hubUI.classList.add('visible');
+  $('workspace-name').textContent = '';
   const list = $('hub-project-list'); list.innerHTML = '';
   if (recentProjects.length === 0) {
     list.innerHTML = `<p style="color:var(--ink-faint); text-align:center;">No recent workspaces. Select a folder to begin.</p>`;
@@ -661,11 +664,12 @@ $('hub-open-folder-btn').addEventListener('click', async () => {
   } catch (err) {}
 });
 
-$('brand-btn').addEventListener('click', () => { state.items = []; itemElements.clear(); world.innerHTML = ''; showProjectHub(); });
+
 
 async function bootCanvas(selectedStorage) {
   storage = selectedStorage; hubUI.classList.remove('visible'); appUI.style.display = 'block';
   world.innerHTML = ''; itemElements.clear(); state.selectedIds.clear();
+  $('workspace-name').textContent = storage.dir.name;
   const data = await storage.loadCanvas();
   state.items = data.items || []; state.pan = data.pan || { x: 0, y: 0 }; state.zoom = data.zoom || 1;
   renderAll();
@@ -1463,7 +1467,7 @@ $('add-frame-btn').onclick = () => {
   state.items.push(item); selectItem(item.id); renderAll(); scheduleSave();
 };
 $('clear-btn').onclick = () => { if (confirm("Clear canvas?")) { pushUndo(); state.items = []; renderAll(); scheduleSave(); } };
-$('brand-btn').onclick = () => showProjectHub();
+$('brand-btn').onclick = () => { window.open(location.href, '_blank'); };
 $('delete-btn').onclick = () => {
   if (state.selectedIds.size === 0) return;
   const deletable = Array.from(state.selectedIds).filter(sid => !isItemInLockedFrame(sid));
