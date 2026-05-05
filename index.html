@@ -96,6 +96,7 @@
   #frame-context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink); text-align: left; }
   #frame-context-menu button:hover { background: rgba(27,26,23,0.06); }
 
+
   .item.file, .item.link { background: var(--surface); border-radius: 6px; box-shadow: 0 2px 8px rgba(27,26,23,0.10), 0 0 0 1px rgba(27,26,23,0.06); padding: 14px 16px; display: flex; align-items: center; gap: 14px; overflow: hidden; }
   .item.file:hover, .item.link:hover { box-shadow: 0 4px 14px rgba(27,26,23,0.14), 0 0 0 1px rgba(27,26,23,0.1); cursor: pointer; }
   .file-icon, .link-icon { font-size: 28px; flex-shrink: 0; line-height: 1; }
@@ -484,6 +485,10 @@
 
   <div id="frame-context-menu">
     <button id="frame-lock-btn"></button>
+    <button id="frame-unlock-btn" style="display:none"></button>
+    <button id="item-note-btn" style="display:none"></button>
+    <button id="delete-images-btn" style="display:none"></button>
+    <button id="delete-notes-btn" style="display:none"></button>
   </div>
 </div>
 
@@ -893,7 +898,9 @@ function isPointInLockedFrame(wx, wy) {
 
 function showItemContextMenu(x, y, item) {
   const menu = $('frame-context-menu');
-  const btn = $('frame-lock-btn');
+  const lockBtn = $('frame-lock-btn');
+  const unlockBtn = $('frame-unlock-btn');
+  const noteBtn = $('item-note-btn');
   // Determine target items: multi-selection or single item
   let targetItems;
   if (!item && state.selectedIds.size > 0) {
@@ -905,23 +912,128 @@ function showItemContextMenu(x, y, item) {
   } else {
     return;
   }
-  const allLocked = targetItems.every(i => i.locked);
-  btn.textContent = allLocked ? 'Unlock' : 'Lock';
-  if (targetItems.length > 1) btn.textContent += ' (' + targetItems.length + ' items)';
-  btn.onclick = () => {
-    pushUndo();
-    const newState = !allLocked;
-    targetItems.forEach(ti => { ti.locked = newState; ti.modifiedAt = Date.now(); });
-    menu.classList.remove('visible');
-    if (newState) {
-      targetItems.forEach(ti => state.selectedIds.delete(ti.id));
-      // Also deselect items now inside locked frames
-      state.selectedIds.forEach(sid => {
-        if (isItemInLockedFrame(sid)) state.selectedIds.delete(sid);
-      });
-    }
-    renderAll(); scheduleSave();
-  };
+  const lockedItems = targetItems.filter(i => i.locked);
+  const unlockedItems = targetItems.filter(i => !i.locked);
+  const allLocked = unlockedItems.length === 0;
+  const allUnlocked = lockedItems.length === 0;
+  const mixed = !allLocked && !allUnlocked;
+
+  // Lock button
+  if (mixed) {
+    lockBtn.textContent = 'Lock (' + unlockedItems.length + ' unlocked)';
+    lockBtn.onclick = () => {
+      pushUndo();
+      unlockedItems.forEach(ti => { ti.locked = true; ti.modifiedAt = Date.now(); });
+      menu.classList.remove('visible');
+      unlockedItems.forEach(ti => state.selectedIds.delete(ti.id));
+      state.selectedIds.forEach(sid => { if (isItemInLockedFrame(sid)) state.selectedIds.delete(sid); });
+      renderAll(); scheduleSave();
+    };
+  } else {
+    lockBtn.textContent = allLocked ? 'Unlock' : 'Lock';
+    if (targetItems.length > 1) lockBtn.textContent += ' (' + targetItems.length + ' items)';
+    lockBtn.onclick = () => {
+      pushUndo();
+      const newState = !allLocked;
+      targetItems.forEach(ti => { ti.locked = newState; ti.modifiedAt = Date.now(); });
+      menu.classList.remove('visible');
+      if (newState) {
+        targetItems.forEach(ti => state.selectedIds.delete(ti.id));
+        state.selectedIds.forEach(sid => { if (isItemInLockedFrame(sid)) state.selectedIds.delete(sid); });
+      }
+      renderAll(); scheduleSave();
+    };
+  }
+  lockBtn.style.display = '';
+
+  // Unlock button (only for mixed selections)
+  if (mixed) {
+    unlockBtn.textContent = 'Unlock (' + lockedItems.length + ' locked)';
+    unlockBtn.style.display = '';
+    unlockBtn.onclick = () => {
+      pushUndo();
+      lockedItems.forEach(ti => { ti.locked = false; ti.modifiedAt = Date.now(); });
+      menu.classList.remove('visible');
+      renderAll(); scheduleSave();
+    };
+  } else {
+    unlockBtn.style.display = 'none';
+  }
+
+  // Note button (single image item only)
+  const singleItem = targetItems.length === 1 ? targetItems[0] : null;
+  if (singleItem && singleItem.type === 'image') {
+    const existingNote = singleItem.noteItemId
+      ? state.items.find(i => i.id === singleItem.noteItemId)
+      : null;
+    noteBtn.textContent = existingNote ? 'Edit Note' : 'Add Note';
+    noteBtn.style.display = '';
+    noteBtn.onclick = () => {
+      menu.classList.remove('visible');
+      if (existingNote) {
+        selectItem(existingNote.id);
+        renderAll();
+        const el = itemElements.get(existingNote.id);
+        if (el) enterTextEdit(el, existingNote.id);
+      } else {
+        pushUndo();
+        const note = {
+          id: uid(), type: 'text',
+          x: singleItem.x + singleItem.width + 20,
+          y: singleItem.y,
+          width: 280, height: 100,
+          content: '', tags: [],
+          linkedImageId: singleItem.id,
+          createdAt: Date.now(), modifiedAt: Date.now()
+        };
+        singleItem.noteItemId = note.id;
+        singleItem.modifiedAt = Date.now();
+        state.items.push(note);
+        selectItem(note.id);
+        renderAll(); scheduleSave();
+        enterTextEdit(itemElements.get(note.id), note.id);
+      }
+    };
+  } else {
+    noteBtn.style.display = 'none';
+  }
+
+  // Delete Images / Delete Notes buttons (multi-selection)
+  const deleteImagesBtn = $('delete-images-btn');
+  const deleteNotesBtn = $('delete-notes-btn');
+  const selectedImages = targetItems.filter(i => i.type === 'image');
+  const selectedNotes = targetItems.filter(i => i.type === 'text');
+  if (selectedImages.length > 0 && targetItems.length > 1) {
+    deleteImagesBtn.textContent = 'Delete Images (' + selectedImages.length + ')';
+    deleteImagesBtn.style.display = '';
+    deleteImagesBtn.onclick = () => {
+      menu.classList.remove('visible');
+      pushUndo();
+      const deleteSet = new Set(selectedImages.filter(i => !i.locked).map(i => i.id));
+      state.items.forEach(i => { if (deleteSet.has(i.id) && i.noteItemId) deleteSet.add(i.noteItemId); });
+      state.items = state.items.filter(i => !deleteSet.has(i.id));
+      deleteSet.forEach(id => state.selectedIds.delete(id));
+      renderAll(); scheduleSave();
+    };
+  } else {
+    deleteImagesBtn.style.display = 'none';
+  }
+  if (selectedNotes.length > 0 && targetItems.length > 1) {
+    deleteNotesBtn.textContent = 'Delete Notes (' + selectedNotes.length + ')';
+    deleteNotesBtn.style.display = '';
+    deleteNotesBtn.onclick = () => {
+      menu.classList.remove('visible');
+      pushUndo();
+      const deleteSet = new Set(selectedNotes.filter(i => !i.locked).map(i => i.id));
+      state.items.forEach(i => { if (deleteSet.has(i.id) && i.linkedImageId) { const img = state.items.find(p => p.id === i.linkedImageId); if (img) delete img.noteItemId; } });
+      state.items = state.items.filter(i => !deleteSet.has(i.id));
+      deleteSet.forEach(id => state.selectedIds.delete(id));
+      renderAll(); scheduleSave();
+    };
+  } else {
+    deleteNotesBtn.style.display = 'none';
+  }
+
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
   menu.classList.add('visible');
@@ -1130,7 +1242,7 @@ viewport.onmousedown = (e) => {
       lasso.style.left = x + 'px'; lasso.style.top = y + 'px'; lasso.style.width = w + 'px'; lasso.style.height = h + 'px';
       const rect = { l: x, t: y, r: x + w, b: y + h };
       state.items.forEach(it => {
-        if (isItemInLockedFrame(it.id)) return;
+        if (isContainedInLockedFrame(it.id)) return;
         const sx = it.x * state.zoom + state.pan.x, sy = it.y * state.zoom + state.pan.y;
         const sw = (it.width || 200) * state.zoom, sh = (it.height || 60) * state.zoom;
         if (sx + sw > rect.l && sx < rect.r && sy + sh > rect.t && sy < rect.b) state.selectedIds.add(it.id);
@@ -1142,6 +1254,7 @@ viewport.onmousedown = (e) => {
       lasso.style.display = 'none';
       window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
       if (Math.hypot(startX - eu.clientX, startY - eu.clientY) < 5) selectItem(null);
+      else if (state.selectedIds.size > 0) showItemContextMenu(eu.clientX, eu.clientY, null);
     };
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
   } else if (e.button === 2 || e.button === 0) {
@@ -1218,7 +1331,7 @@ function startSpaceLasso() {
     lasso.style.left = x + 'px'; lasso.style.top = y + 'px'; lasso.style.width = w + 'px'; lasso.style.height = h + 'px';
     const rect = { l: x, t: y, r: x + w, b: y + h };
     state.items.forEach(it => {
-      if (isItemInLockedFrame(it.id)) return;
+      if (isContainedInLockedFrame(it.id)) return;
       const sx = it.x * state.zoom + state.pan.x, sy = it.y * state.zoom + state.pan.y;
       const sw = (it.width || 200) * state.zoom, sh = (it.height || 60) * state.zoom;
       if (sx + sw > rect.l && sx < rect.r && sy + sh > rect.t && sy < rect.b) state.selectedIds.add(it.id);
@@ -1252,6 +1365,7 @@ function endSpaceLasso() {
   window.removeEventListener('mousemove', spaceLasso.onMove);
   // If barely moved, treat as deselect click
   if (Math.hypot(spaceLasso.startX - mousePos.x, spaceLasso.startY - mousePos.y) < 5) selectItem(null);
+  else if (state.selectedIds.size > 0) showItemContextMenu(mousePos.x, mousePos.y, null);
   spaceLasso = null;
 }
 
@@ -1309,6 +1423,9 @@ window.addEventListener('keydown', e => {
     if (deletable.length === 0) return;
     pushUndo();
     const deleteSet = new Set(deletable);
+    state.items.forEach(i => { if (deleteSet.has(i.id) && i.noteItemId) deleteSet.add(i.noteItemId); });
+    state.items.forEach(i => { if (i.noteItemId && deleteSet.has(i.noteItemId)) delete i.noteItemId; });
+    state.items.forEach(i => { if (deleteSet.has(i.id) && i.linkedImageId) { const img = state.items.find(p => p.id === i.linkedImageId); if (img) delete img.noteItemId; } });
     state.items = state.items.filter(i => !deleteSet.has(i.id)); state.selectedIds.clear(); renderAll(); scheduleSave();
   }
   if (e.key === '\\' && !isEditingField()) { toggleSidebar(); }
@@ -1499,6 +1616,9 @@ $('delete-btn').onclick = () => {
   if (deletable.length === 0) return;
   pushUndo();
   const deleteSet = new Set(deletable);
+  state.items.forEach(i => { if (deleteSet.has(i.id) && i.noteItemId) deleteSet.add(i.noteItemId); });
+  state.items.forEach(i => { if (i.noteItemId && deleteSet.has(i.noteItemId)) delete i.noteItemId; });
+  state.items.forEach(i => { if (deleteSet.has(i.id) && i.linkedImageId) { const img = state.items.find(p => p.id === i.linkedImageId); if (img) delete img.noteItemId; } });
   state.items = state.items.filter(i => !deleteSet.has(i.id));
   state.selectedIds.clear(); renderAll(); scheduleSave();
 };
