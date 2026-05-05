@@ -894,14 +894,28 @@ function isPointInLockedFrame(wx, wy) {
 function showItemContextMenu(x, y, item) {
   const menu = $('frame-context-menu');
   const btn = $('frame-lock-btn');
-  btn.textContent = item.locked ? 'Unlock' : 'Lock';
+  // Determine target items: multi-selection or single item
+  let targetItems;
+  if (!item && state.selectedIds.size > 0) {
+    targetItems = Array.from(state.selectedIds).map(id => state.items.find(i => i.id === id)).filter(Boolean);
+  } else if (item && state.selectedIds.size > 1 && state.selectedIds.has(item.id)) {
+    targetItems = Array.from(state.selectedIds).map(id => state.items.find(i => i.id === id)).filter(Boolean);
+  } else if (item) {
+    targetItems = [item];
+  } else {
+    return;
+  }
+  const allLocked = targetItems.every(i => i.locked);
+  btn.textContent = allLocked ? 'Unlock' : 'Lock';
+  if (targetItems.length > 1) btn.textContent += ' (' + targetItems.length + ' items)';
   btn.onclick = () => {
     pushUndo();
-    item.locked = !item.locked;
-    item.modifiedAt = Date.now();
+    const newState = !allLocked;
+    targetItems.forEach(ti => { ti.locked = newState; ti.modifiedAt = Date.now(); });
     menu.classList.remove('visible');
-    // Deselect items that are now inside the locked frame
-    if (item.locked) {
+    if (newState) {
+      targetItems.forEach(ti => state.selectedIds.delete(ti.id));
+      // Also deselect items now inside locked frames
       state.selectedIds.forEach(sid => {
         if (isItemInLockedFrame(sid)) state.selectedIds.delete(sid);
       });
@@ -1149,8 +1163,12 @@ window.addEventListener('mouseup', e => {
     const dist = Math.hypot(e.clientX - panStart.x, e.clientY - panStart.y);
     if (dist < 5) {
       if (panStart.button === 2) {
-        const w = screenToWorld(e.clientX, e.clientY);
-        if (!isPointInLockedFrame(w.x, w.y)) addText(w.x, w.y);
+        if (state.selectedIds.size > 0) {
+          showItemContextMenu(e.clientX, e.clientY, null);
+        } else {
+          const w = screenToWorld(e.clientX, e.clientY);
+          if (!isPointInLockedFrame(w.x, w.y)) addText(w.x, w.y);
+        }
       } else {
         selectItem(null); // left click on empty canvas → deselect
       }
