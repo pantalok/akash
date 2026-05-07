@@ -1576,7 +1576,9 @@ window.addEventListener('keydown', e => {
     e.preventDefault(); performUndo();
   }
   if ((e.key === 'd' || e.key === 'D') && (e.metaKey || e.ctrlKey) && !isEditingField() && state.selectedIds.size > 0) {
-    e.preventDefault(); $('duplicate-btn').click();
+    e.preventDefault();
+    if (spaceLasso) { spaceLasso.lasso.style.display = 'none'; if (spaceLasso.edgeScrollId) cancelAnimationFrame(spaceLasso.edgeScrollId); window.removeEventListener('mousemove', spaceLasso.onMove); spaceLasso = null; isSpaceDown = false; viewport.classList.remove('space-mode'); }
+    $('duplicate-btn').click();
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedIds.size > 0 && !isEditingField()) {
     const deletable = Array.from(state.selectedIds).filter(sid => !isItemInLockedFrame(sid));
@@ -1849,11 +1851,16 @@ $('duplicate-btn').onclick = () => {
   const duplicable = Array.from(state.selectedIds).filter(sid => !isItemInLockedFrame(sid));
   if (duplicable.length === 0) return;
   pushUndo();
+  // Calculate bounding box of selected region
+  const origs = duplicable.map(sid => state.items.find(i => i.id === sid)).filter(Boolean);
+  const regionRight = Math.max(...origs.map(i => i.x + (i.width || 200)));
+  const regionLeft = Math.min(...origs.map(i => i.x));
+  const offsetX = regionRight - regionLeft + 20;
   const newIds = [];
   duplicable.forEach(sid => {
     const orig = state.items.find(i => i.id === sid); if (!orig) return;
     const clone = JSON.parse(JSON.stringify(orig));
-    clone.id = uid(); clone.x += clone.width + 20;
+    clone.id = uid(); clone.x += offsetX;
     state.items.push(clone); newIds.push(clone.id);
   });
   state.selectedIds.clear();
