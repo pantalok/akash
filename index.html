@@ -75,7 +75,8 @@
   .item.text .text-content ul ul, .item.text .text-content ol ol, .item.text .text-content ul ol, .item.text .text-content ol ul { margin: 0; padding-left: 20px; }
   .item.text .text-content code { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: rgba(27,26,23,0.06); padding: 1px 5px; border-radius: 3px; }
   .item.text .text-content pre { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: rgba(27,26,23,0.06); padding: 8px 10px; border-radius: 4px; margin: 0 0 6px 0; overflow-x: auto; white-space: pre; }
-  .item.text .text-content a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  .item.text .text-content a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; cursor: pointer; }
+  .item.text.editing .text-content a { cursor: text; }
   .item.text .text-content strong { font-weight: 600; color: var(--ink); } .item.text .text-content em { font-style: italic; }
   .item.text .text-content blockquote { margin: 0 0 6px 0; padding-left: 10px; border-left: 3px solid var(--ink-faint); color: var(--ink-soft); font-style: italic; }
   .item.text .text-content hr { border: none; border-top: 1px solid var(--line-strong); margin: 8px 0; }
@@ -741,7 +742,8 @@ function cullItems() {
 function renderMarkdown(src) {
   if (!src || !src.trim()) return '';
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return src.split('\n').map(line => `<p>${esc(line)}</p>`).join('');
+  const html = src.split('\n').map(line => `<p>${esc(line)}</p>`).join('');
+  return linkifyHtml(html);
 }
 
 const NOTE_COLORS = [
@@ -1237,7 +1239,14 @@ function attachItemHandlers(el, id) {
     e.stopPropagation();
     showItemContextMenu(e.clientX, e.clientY, item);
   });
-  if (el.classList.contains('text')) el.ondblclick = (e) => { e.stopPropagation(); if (isItemInLockedFrame(id)) return; enterTextEdit(el, id); };
+  if (el.classList.contains('text')) {
+    el.addEventListener('click', (e) => {
+      if (el.classList.contains('editing')) return;
+      const a = e.target.closest('a');
+      if (a && a.href) { e.preventDefault(); e.stopPropagation(); window.open(a.href, '_blank', 'noopener'); }
+    });
+    el.ondblclick = (e) => { e.stopPropagation(); if (isItemInLockedFrame(id)) return; enterTextEdit(el, id); };
+  }
   if (el.classList.contains('file')) el.ondblclick = (e) => { e.stopPropagation(); const item = state.items.find(i => i.id === id); if (item) openFileItem(item); };
 }
 
@@ -1525,6 +1534,7 @@ function enterTextEdit(el, id) {
     // Strip trailing empty elements from HTML
     let html = tc.innerHTML;
     html = html.replace(/(<br\s*\/?>|\s|<div><br\s*\/?><\/div>|<p><br\s*\/?><\/p>)+$/gi, '');
+    html = linkifyHtml(html);
     tc.innerHTML = html;
     item.contentHtml = html;
     // Auto-fit width using actual measured content width
@@ -1897,6 +1907,57 @@ function sanitizeHtml(html) {
     Array.from(node.childNodes).forEach(clean);
   }
   Array.from(doc.body.childNodes).forEach(clean);
+  return doc.body.innerHTML;
+}
+
+// Auto-linkify: convert plain-text URLs and file paths into clickable <a> tags
+function linkifyHtml(html) {
+  if (!html) return html;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // URL pattern: http(s)://, www., or common TLDs
+  const urlRe = /(?:https?:\/\/|www\.)[^\s<>"')\]]+/gi;
+  // File path pattern: /absolute/path or ~/path (Unix-style)
+  const fileRe = /(?:~\/|\/(?:Users|home|tmp|var|etc|opt|usr|mnt|Volumes)\/)[^\s<>"')\]]+/gi;
+  function processNode(node) {
+    if (node.nodeType !== Node.TEXT_NODE) {
+      // Skip <a> tags — already linked
+      if (node.tagName === 'A') return;
+      Array.from(node.childNodes).forEach(processNode);
+      return;
+    }
+    const text = node.textContent;
+    // Combine both patterns with alternation
+    const combined = new RegExp('(' + urlRe.source + '|' + fileRe.source + ')', 'gi');
+    if (!combined.test(text)) return;
+    combined.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let lastIdx = 0;
+    let match;
+    while ((match = combined.exec(text)) !== null) {
+      if (match.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, match.index)));
+      const raw = match[0];
+      const a = document.createElement('a');
+      if (/^https?:\/\//i.test(raw)) {
+        a.href = raw;
+      } else if (/^www\./i.test(raw)) {
+        a.href = 'https://' + raw;
+      } else {
+        // File path — use file:// protocol
+        const expanded = raw.startsWith('~/')
+          ? 'file:///Users/' + raw.slice(2) // expand ~ for macOS
+          : 'file://' + raw;
+        a.href = expanded;
+      }
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = raw;
+      frag.appendChild(a);
+      lastIdx = combined.lastIndex;
+    }
+    if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+    node.parentNode.replaceChild(frag, node);
+  }
+  Array.from(doc.body.childNodes).forEach(processNode);
   return doc.body.innerHTML;
 }
 
