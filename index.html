@@ -72,6 +72,7 @@
   .item.text .text-content h1 { font-size: 1.55em; } .item.text .text-content h2 { font-size: 1.3em; } .item.text .text-content h3 { font-size: 1.12em; }
   .item.text .text-content p { margin: 0 0 6px 0; } .item.text .text-content p:last-child { margin-bottom: 0; }
   .item.text .text-content ul, .item.text .text-content ol { margin: 0 0 6px 0; padding-left: 22px; } .item.text .text-content li { margin: 1px 0; }
+  .item.text .text-content ul ul, .item.text .text-content ol ol, .item.text .text-content ul ol, .item.text .text-content ol ul { margin: 0; padding-left: 20px; }
   .item.text .text-content code { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: rgba(27,26,23,0.06); padding: 1px 5px; border-radius: 3px; }
   .item.text .text-content pre { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: rgba(27,26,23,0.06); padding: 8px 10px; border-radius: 4px; margin: 0 0 6px 0; overflow-x: auto; white-space: pre; }
   .item.text .text-content a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
@@ -80,6 +81,7 @@
   .item.text .text-content hr { border: none; border-top: 1px solid var(--line-strong); margin: 8px 0; }
   .item.text .text-content .cb-line { display: flex; align-items: flex-start; gap: 7px; margin: 2px 0; }
   .item.text .text-content .cb-line input[type="checkbox"] { margin: 4px 0 0 0; cursor: pointer; accent-color: var(--ink); flex-shrink: 0; }
+  .item.text .text-content .cb-line span { flex: 1; min-width: 20px; outline: none; min-height: 1.4em; }
   .item.text .text-content .cb-line.done { color: var(--ink-faint); text-decoration: line-through; text-decoration-thickness: 1px; }
   .item.text.editing { outline: none; box-shadow: 0 0 0 2px rgba(70, 130, 200, 0.3), 0 2px 12px rgba(70, 130, 200, 0.15); }
   .item.text.editing.selected::before, .item.text.editing.selected::after { display: none; }
@@ -1020,7 +1022,7 @@ function showItemContextMenu(x, y, item) {
           id: uid(), type: 'text',
           x: singleItem.x + singleItem.width + 20,
           y: singleItem.y,
-          width: 280, height: 100,
+          width: 320, height: 60,
           content: '', tags: [],
           linkedImageId: singleItem.id,
           createdAt: Date.now(), modifiedAt: Date.now()
@@ -1253,6 +1255,227 @@ function enterTextEdit(el, id) {
     if (newH > item.height) { item.height = newH; el.style.height = newH + 'px'; }
   };
   tc.addEventListener('input', onInput);
+  // Markdown auto-formatting: detect line-start patterns and convert to rich elements
+  const onInputMarkdown = () => {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const node = sel.anchorNode;
+    if (!node || node.nodeType !== Node.TEXT_NODE) return;
+    const text = node.textContent;
+    const offset = sel.anchorOffset;
+    // Only trigger at the end of the typed pattern
+    const patterns = [
+      { re: /^- $/, tag: 'insertUnorderedList' },
+      { re: /^\* $/, tag: 'insertUnorderedList' },
+      { re: /^1\. $/, tag: 'insertOrderedList' },
+      { re: /^# $/, tag: 'h1' },
+      { re: /^## $/, tag: 'h2' },
+      { re: /^### $/, tag: 'h3' },
+      { re: /^---$/, tag: 'hr' },
+      { re: /^> $/, tag: 'blockquote' },
+      { re: /^\[\] $/, tag: 'checkbox' },
+      { re: /^\[ \] $/, tag: 'checkbox' },
+    ];
+    for (const p of patterns) {
+      if (p.re.test(text) && offset === text.length) {
+        // Find the block-level parent element to replace
+        let block = node.parentElement;
+        while (block && block !== tc && !['DIV','P','LI'].includes(block.tagName)) block = block.parentElement;
+        // Helper: create element and place cursor inside it
+        const replaceWithElement = (tagName, targetNode, isBlock) => {
+          const el = document.createElement(tagName);
+          el.appendChild(document.createElement('br'));
+          if (isBlock && targetNode !== tc) {
+            targetNode.parentNode.replaceChild(el, targetNode);
+          } else {
+            // targetNode is a text node direct in tc
+            targetNode.parentNode.replaceChild(el, targetNode);
+          }
+          const r = document.createRange();
+          r.selectNodeContents(el); r.collapse(true);
+          sel.removeAllRanges(); sel.addRange(r);
+        };
+        const target = (!block || block === tc) ? node : block;
+        const isBlock = target !== node;
+        if (p.tag === 'insertUnorderedList' || p.tag === 'insertOrderedList') {
+          if (isBlock) {
+            const range = document.createRange();
+            range.selectNodeContents(target); range.collapse(false);
+            sel.removeAllRanges(); sel.addRange(range);
+          }
+          target.textContent = '';
+          document.execCommand(p.tag, false, null);
+        } else if (p.tag === 'hr') {
+          target.textContent = '';
+          document.execCommand('insertHTML', false, '<hr><br>');
+        } else if (p.tag === 'blockquote') {
+          target.textContent = '';
+          replaceWithElement('blockquote', target, isBlock);
+        } else if (p.tag === 'checkbox') {
+          const cbDiv = document.createElement('div');
+          cbDiv.className = 'cb-line';
+          cbDiv.innerHTML = '<input type="checkbox"><span>&nbsp;</span>';
+          target.parentNode.replaceChild(cbDiv, target);
+          requestAnimationFrame(() => {
+            const s2 = window.getSelection();
+            const span = cbDiv.querySelector('span');
+            if (span) { const r = document.createRange(); r.selectNodeContents(span); r.collapse(false); s2.removeAllRanges(); s2.addRange(r); }
+          });
+        } else {
+          // h1, h2, h3 — direct DOM replacement to avoid formatBlock bleed
+          target.textContent = '';
+          replaceWithElement(p.tag, target, isBlock);
+        }
+        onInput();
+        return;
+      }
+    }
+  };
+  tc.addEventListener('input', onInputMarkdown);
+  // Keydown handler for list behaviors and formatting shortcuts
+  let escPressed = false;
+  const onKeydown = (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    const sel = window.getSelection();
+    // Double-Esc to exit editing
+    if (e.key === 'Escape') {
+      if (escPressed) {
+        e.preventDefault();
+        tc.blur();
+        return;
+      }
+      escPressed = true;
+      return;
+    }
+    escPressed = false;
+    // Tab handling
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const li = sel.anchorNode && sel.anchorNode.nodeType === Node.TEXT_NODE
+        ? sel.anchorNode.parentElement.closest('li')
+        : (sel.anchorNode && sel.anchorNode.closest ? sel.anchorNode.closest('li') : null);
+      if (li) {
+        document.execCommand(e.shiftKey ? 'outdent' : 'indent', false, null);
+      } else {
+        // Insert 4 spaces
+        document.execCommand('insertText', false, '    ');
+      }
+      onInput();
+      return;
+    }
+    // Enter on empty list item: exit list progressively
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const li = sel.anchorNode && sel.anchorNode.nodeType === Node.TEXT_NODE
+        ? sel.anchorNode.parentElement.closest('li')
+        : (sel.anchorNode && sel.anchorNode.closest ? sel.anchorNode.closest('li') : null);
+      if (li && li.textContent.trim() === '') {
+        e.preventDefault();
+        const parentList = li.parentElement; // ul or ol
+        const isNested = parentList && parentList.parentElement && parentList.parentElement.closest('ul, ol');
+        if (isNested) {
+          // Outdent nested empty bullet
+          document.execCommand('outdent', false, null);
+        } else {
+          // Top-level empty bullet: remove list formatting
+          // Remove the empty li
+          li.remove();
+          // If the list is now empty, remove it too
+          if (parentList && parentList.children.length === 0) {
+            const br = document.createElement('br');
+            parentList.parentNode.insertBefore(br, parentList.nextSibling);
+            parentList.remove();
+            // Place cursor after the br
+            const range = document.createRange();
+            range.setStartAfter(br);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          } else {
+            // Place cursor after the list
+            const range = document.createRange();
+            const br = document.createElement('br');
+            parentList.parentNode.insertBefore(br, parentList.nextSibling);
+            range.setStartAfter(br);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        }
+        onInput();
+        return;
+      }
+      // Enter on empty blockquote: exit back to normal paragraph
+      const bq = sel.anchorNode && (sel.anchorNode.nodeType === Node.TEXT_NODE
+        ? sel.anchorNode.parentElement.closest('blockquote')
+        : (sel.anchorNode.closest ? sel.anchorNode.closest('blockquote') : null));
+      if (bq && bq.textContent.trim() === '') {
+        e.preventDefault();
+        const div = document.createElement('div');
+        div.appendChild(document.createElement('br'));
+        bq.parentNode.replaceChild(div, bq);
+        const r = document.createRange();
+        r.selectNodeContents(div); r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r);
+        onInput();
+        return;
+      }
+      // Enter inside a checkbox line
+      const cbLine = sel.anchorNode && (sel.anchorNode.nodeType === Node.TEXT_NODE
+        ? sel.anchorNode.parentElement.closest('.cb-line')
+        : (sel.anchorNode.closest ? sel.anchorNode.closest('.cb-line') : null));
+      if (cbLine) {
+        e.preventDefault();
+        const span = cbLine.querySelector('span');
+        const spanText = span ? span.textContent.replace(/\u00a0/g, '').trim() : '';
+        if (!spanText) {
+          // Empty checkbox: remove it and place cursor on a plain line
+          const div = document.createElement('div');
+          div.appendChild(document.createElement('br'));
+          cbLine.parentNode.replaceChild(div, cbLine);
+          const r = document.createRange();
+          r.selectNodeContents(div); r.collapse(true);
+          sel.removeAllRanges(); sel.addRange(r);
+        } else {
+          // Create a new checkbox line after the current one
+          const newCb = document.createElement('div');
+          newCb.className = 'cb-line';
+          newCb.innerHTML = '<input type="checkbox"><span>&nbsp;</span>';
+          cbLine.parentNode.insertBefore(newCb, cbLine.nextSibling);
+          const newSpan = newCb.querySelector('span');
+          const r = document.createRange();
+          r.selectNodeContents(newSpan); r.collapse(true);
+          sel.removeAllRanges(); sel.addRange(r);
+        }
+        onInput();
+        return;
+      }
+    }
+    // Formatting shortcuts
+    if (mod && e.shiftKey && (e.key === '8' || e.code === 'Digit8')) {
+      e.preventDefault();
+      document.execCommand('insertUnorderedList', false, null);
+      onInput(); return;
+    }
+    if (mod && e.shiftKey && (e.key === '7' || e.code === 'Digit7')) {
+      e.preventDefault();
+      document.execCommand('insertOrderedList', false, null);
+      onInput(); return;
+    }
+    if (mod && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      document.execCommand('strikeThrough', false, null);
+      return;
+    }
+    if (mod && !e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+      e.preventDefault();
+      const selection = sel.toString();
+      if (selection) {
+        document.execCommand('insertHTML', false, '<code>' + selection.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code>');
+      }
+      return;
+    }
+  };
+  tc.addEventListener('keydown', onKeydown);
   // On paste: expand width to MAX_W, let content reflow, then fit height
   const onPaste = () => {
     requestAnimationFrame(() => {
@@ -1273,6 +1496,8 @@ function enterTextEdit(el, id) {
   tc.onblur = () => {
     if (toolbarInteracting) return;
     tc.removeEventListener('input', onInput);
+    tc.removeEventListener('input', onInputMarkdown);
+    tc.removeEventListener('keydown', onKeydown);
     tc.removeEventListener('paste', onPaste);
     tc.contentEditable = 'false'; el.classList.remove('editing');
     const newText = tc.innerText; const newHtml = tc.innerHTML;
@@ -1301,13 +1526,15 @@ function enterTextEdit(el, id) {
     html = html.replace(/(<br\s*\/?>|\s|<div><br\s*\/?><\/div>|<p><br\s*\/?><\/p>)+$/gi, '');
     tc.innerHTML = html;
     item.contentHtml = html;
-    // Auto-fit width for short text
+    // Auto-fit width using actual measured content width
     const lines = trimmedText.split('\n');
-    const longestLine = Math.max(...lines.map(l => l.length));
-    const charWidth = (item.fontSize || 14) * 0.6;
-    const textWidth = longestLine * charWidth + 36;
+    const origW = tc.style.width;
+    tc.style.width = 'max-content';
+    const measuredW = tc.offsetWidth + 36;
+    tc.style.width = origW;
+    const textWidth = Math.min(item.width, measuredW);
     if (textWidth < item.width && lines.length <= 3) {
-      item.width = Math.max(120, Math.min(item.width, textWidth));
+      item.width = Math.max(120, textWidth);
       el.style.width = item.width + 'px';
     }
     // Collapse height to measure true content height
@@ -1702,7 +1929,7 @@ function clearSnapGuides() { world.querySelectorAll('.snap-guide').forEach(g => 
 
 function addText(x, y) {
   pushUndo();
-  const item = { id: uid(), type: 'text', x, y, width: 280, height: 100, content: '', tags: [], createdAt: Date.now(), modifiedAt: Date.now() };
+  const item = { id: uid(), type: 'text', x, y, width: 320, height: 60, content: '', tags: [], createdAt: Date.now(), modifiedAt: Date.now() };
   state.items.push(item); selectItem(item.id); renderAll(); enterTextEdit(itemElements.get(item.id), item.id);
 }
 
