@@ -702,6 +702,7 @@ async function bootCanvas(selectedStorage) {
   storage = selectedStorage; hubUI.classList.remove('visible'); appUI.style.display = 'block';
   world.innerHTML = ''; itemElements.clear(); state.selectedIds.clear();
   $('workspace-name').textContent = storage.dir.name;
+  document.title = 'Ak@sh — ' + storage.dir.name;
   const data = await storage.loadCanvas();
   state.items = data.items || []; state.pan = data.pan || { x: 0, y: 0 }; state.zoom = data.zoom || 1;
   renderAll();
