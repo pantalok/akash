@@ -1245,17 +1245,32 @@ function attachItemHandlers(el, id) {
       const a = e.target.closest('a');
       if (a && a.href) { e.preventDefault(); e.stopPropagation(); window.open(a.href, '_blank', 'noopener'); }
     });
-    el.ondblclick = (e) => { e.stopPropagation(); if (isItemInLockedFrame(id)) return; enterTextEdit(el, id); };
+    el.ondblclick = (e) => { e.stopPropagation(); if (isItemInLockedFrame(id)) return; enterTextEdit(el, id, e); };
   }
   if (el.classList.contains('file')) el.ondblclick = (e) => { e.stopPropagation(); const item = state.items.find(i => i.id === id); if (item) openFileItem(item); };
 }
 
-function enterTextEdit(el, id) {
+function enterTextEdit(el, id, evt) {
   const tc = el.querySelector('.text-content'); const item = state.items.find(i => i.id === id);
   // Clear placeholder hint so the user types into a blank note
   const hint = tc.querySelector('.empty-hint');
   if (hint) tc.innerHTML = '';
   tc.contentEditable = 'true'; el.classList.add('editing'); tc.focus();
+  // Place caret at double-click position instead of start of note
+  if (evt) {
+    let range;
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(evt.clientX, evt.clientY);
+    } else if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(evt.clientX, evt.clientY);
+      if (pos) { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); range.collapse(true); }
+    }
+    if (range) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
   const snapshotBeforeEdit = JSON.parse(JSON.stringify(state.items));
   const MIN_H = 60;
   const MAX_W = 600;
