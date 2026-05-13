@@ -17,6 +17,16 @@ A fully local, browser-based canvas workspace for organizing notes, images, and 
 - **Sidebar Outline** — Toggle with `\`. View items organized by tags or timeline.
 - **Undo** — `Ctrl/Cmd+Z` with up to 50 levels.
 
+### Selection & Layout
+
+- **Arrange Grid** — Select 2+ items, right-click, and choose "Arrange Grid" to snap them into a centered grid layout. Locked items are excluded.
+- **Arrange Row** — Select 2+ items, right-click, and choose "Arrange Row" to line them up horizontally with even spacing, preserving left-to-right order.
+- **Scale Selection** — Select 2+ items, right-click, and choose "Scale Selection" to show a dashed bounding box with corner drag handles. Drag any corner to proportionally resize all selected items (positions and dimensions). The opposite corner stays anchored. Press `Escape` to dismiss.
+- **Zoom to Selection** — Select 1+ items, right-click, and choose "Zoom to Selection" to pan and zoom the viewport to fit all selected items with padding.
+- **Bulk Tag** — Select multiple items, right-click, and choose "Tag All" to add a tag to all selected items at once.
+- **Bulk Color** — Select multiple text/frame items, right-click, and choose "Set Color" to apply a background color to all of them.
+- **Collapse/Expand Notes** — Select items with text notes, right-click, and choose "Collapse Notes" or "Expand Notes" to toggle their collapsed state.
+
 ### Multi-Canvas Connection
 
 - **Canvas Switcher** — Click the Ak@sh brand button or press `Cmd/Ctrl+K` to open the workspace switcher dropdown. Lists all recent workspaces sorted by last opened, with the current one highlighted. Includes "Open folder..." to browse for an existing workspace and "New canvas..." to create a fresh one.
@@ -49,6 +59,7 @@ A fully local, browser-based canvas workspace for organizing notes, images, and 
 | Navigate forward | `Alt` + `Right` |
 | Search results up/down | `Arrow Up` / `Arrow Down` |
 | Open search result | `Enter` |
+| Exit scale mode | `Escape` |
 | Clear search & exit | `Escape` |
 
 ## Requirements
