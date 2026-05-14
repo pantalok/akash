@@ -626,6 +626,7 @@
     <button id="bulk-color-btn" style="display:none"></button>
     <button id="bulk-collapse-btn" style="display:none"></button>
     <button id="copy-link-btn" style="display:none"></button>
+    <button id="copy-clipboard-btn" style="display:none"></button>
     <div id="arrange-separator" class="menu-separator" style="display:none"></div>
     <button id="arrange-grid-btn" style="display:none">Arrange Grid</button>
     <button id="arrange-row-btn" style="display:none">Arrange Row</button>
@@ -1278,6 +1279,38 @@ function pasteItemLink(x, y) {
   createCanvasLink(x, y, canvasLinkClipboard.targetWorkspaceId, canvasLinkClipboard.targetWorkspaceName, canvasLinkClipboard.targetItemId, canvasLinkClipboard.targetItemPreview, canvasLinkClipboard.targetItemType);
 }
 
+async function copySelectedToClipboard(overrideItems) {
+  const items = overrideItems || Array.from(state.selectedIds).map(id => state.items.find(i => i.id === id)).filter(Boolean);
+  if (items.length === 0) return;
+  // If single image, copy image to clipboard
+  if (items.length === 1 && items[0].type === 'image') {
+    const item = items[0];
+    try {
+      // Use the already-loaded <img> from the DOM and convert synchronously
+      const el = itemElements.get(item.id);
+      const imgEl = el && el.querySelector('img');
+      if (!imgEl || !imgEl.complete || !imgEl.naturalWidth) return;
+      const c = document.createElement('canvas');
+      c.width = imgEl.naturalWidth;
+      c.height = imgEl.naturalHeight;
+      c.getContext('2d').drawImage(imgEl, 0, 0);
+      // Synchronously convert to blob via toDataURL to preserve user gesture
+      const dataUrl = c.toDataURL('image/png');
+      const byteStr = atob(dataUrl.split(',')[1]);
+      const buf = new Uint8Array(byteStr.length);
+      for (let i = 0; i < byteStr.length; i++) buf[i] = byteStr.charCodeAt(i);
+      const blob = new Blob([buf], { type: 'image/png' });
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    } catch (e) { console.warn('Copy image failed:', e); }
+    return;
+  }
+  // For text items (or mixed), copy text content
+  const textParts = items.filter(i => i.type === 'text' && i.content).map(i => i.content);
+  if (textParts.length > 0) {
+    try { await navigator.clipboard.writeText(textParts.join('\n\n')); } catch (e) { console.warn('Copy text failed:', e); }
+  }
+}
+
 function showCanvasContextMenu(sx, sy) {
   const menu = $('frame-context-menu');
   // Hide all existing buttons
@@ -1927,6 +1960,22 @@ function showItemContextMenu(x, y, item) {
     };
   } else {
     copyLinkBtn.style.display = 'none';
+  }
+
+  // Copy to OS clipboard button (text and image items)
+  const copyClipBtn = $('copy-clipboard-btn');
+  const hasText = targetItems.some(i => i.type === 'text' && i.content);
+  const hasSingleImage = singleItem && singleItem.type === 'image';
+  if (hasText || hasSingleImage) {
+    copyClipBtn.textContent = hasSingleImage ? 'Copy Image' : 'Copy Text';
+    copyClipBtn.style.display = '';
+    const copyTargets = [...targetItems];
+    copyClipBtn.onclick = () => {
+      menu.classList.remove('visible');
+      copySelectedToClipboard(copyTargets);
+    };
+  } else {
+    copyClipBtn.style.display = 'none';
   }
 
   // Arrange & Zoom buttons
@@ -2704,6 +2753,10 @@ window.addEventListener('keydown', e => {
   }
   if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !isEditingField()) {
     e.preventDefault(); performUndo();
+  }
+  // Cmd/Ctrl+C: Copy selected items to OS clipboard
+  if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !isEditingField() && state.selectedIds.size > 0) {
+    e.preventDefault(); copySelectedToClipboard();
   }
   if ((e.key === 'd' || e.key === 'D') && (e.metaKey || e.ctrlKey) && !isEditingField() && state.selectedIds.size > 0) {
     e.preventDefault();
