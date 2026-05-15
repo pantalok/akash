@@ -13,9 +13,23 @@ A fully local, browser-based canvas workspace for organizing notes, images, and 
 - **Frame Locking** — Right-click a frame to lock/unlock. Locked frames protect all fully contained items from editing, moving, resizing, or deletion. Resizing an unlocked frame proportionally scales all items within it.
 - **Tagging** — Add comma-separated tags to any item via the context toolbar. Browse by tag in the sidebar outline.
 - **Bookmarks** — Pin items for quick access from the bookmarks panel.
-- **Search** — Full-text search with support for `recent:7d`, `after:YYYY-MM-DD`, `before:YYYY-MM-DD`, `pinned:yes`, and `file:yes` filters. Arrow keys navigate results live.
-- **Sidebar Outline** — Toggle with `\`. View items organized by tags or timeline.
+- **Search** — Full-text search with support for `recent:7d`, `after:YYYY-MM-DD`, `before:YYYY-MM-DD`, `pinned:yes`, `file:yes`, and `action:yes` filters. Arrow keys navigate results live.
+- **Sidebar Outline** — Toggle with `\`. View items organized by tags, timeline, or action items.
+- **Clipboard Copy** — Select a note or image and press `Cmd/Ctrl+C` to copy its content to the OS clipboard for pasting in external apps. Also available via right-click menu.
 - **Undo** — `Ctrl/Cmd+Z` with up to 50 levels.
+
+### Action Items
+
+Track follow-ups and tasks directly on your canvas using tag conventions:
+
+- **Mark as action item** — Add the `action` tag to any note. A small dot indicator appears on the item.
+- **Set owner** — Use `self` for your own tasks, or `1:1/name` (e.g. `1:1/sarah`, `1:1/mike`) for items to discuss in 1:1 meetings.
+- **Set priority** — Add `p1` (red), `p2` (amber), or `p3` tags. Higher priority items sort first.
+- **Mark done** — Add the `done` tag. Done items are visually muted on the canvas and in the sidebar.
+- **Actions sidebar** — Press `\` to open the sidebar, then click the **Actions** tab. Items are grouped by owner ("My Actions" first, then each 1:1 contact), sorted by priority within each group. Toggle completion directly from the checkbox.
+- **Search** — Use `action:yes` in the search bar to filter to action items only.
+
+Example tags for a note: `action, 1:1/sarah, p1`
 
 ### Selection & Layout
 
@@ -51,6 +65,7 @@ A fully local, browser-based canvas workspace for organizing notes, images, and 
 | Duplicate | `Cmd/Ctrl` + `D` |
 | Delete | `Delete` / `Backspace` |
 | Undo | `Cmd/Ctrl` + `Z` |
+| Copy to clipboard | `Cmd/Ctrl` + `C` |
 | Paste at cursor | `Cmd/Ctrl` + `V` |
 | Toggle outline | `\` |
 | Open file | Double-click file |

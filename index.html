@@ -132,9 +132,17 @@
   .handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; } .handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
   .item-tags { position: absolute; top: calc(100% + 8px); left: 0; display: flex; gap: 4px; flex-wrap: wrap; max-width: 100%; pointer-events: none; }
   .tag-chip { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500; padding: 4px 10px; background: var(--ink); color: var(--bg); border-radius: 999px; letter-spacing: 0.04em; text-transform: lowercase; }
+  .tag-chip.tag-p1 { background: #c0392b; }
+  .tag-chip.tag-p2 { background: #d4930d; }
+  .tag-chip.tag-done { background: var(--ink-faint); text-decoration: line-through; }
   .item-timestamp { position: absolute; top: calc(100% + 8px); left: 0; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-faint); opacity: 0; transition: opacity 0.15s; pointer-events: none; white-space: nowrap; letter-spacing: 0.02em; }
   .item-tags ~ .item-timestamp { top: calc(100% + 32px); }
   .item:hover .item-timestamp { opacity: 1; }
+  .action-badge { position: absolute; top: -4px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); border: 2px solid var(--surface); pointer-events: none; z-index: 12; }
+  .action-badge.p1 { background: #c0392b; }
+  .action-badge.p2 { background: #d4930d; }
+  .item.action-done { opacity: 0.55; }
+  .item.action-done .action-badge { background: var(--ink-faint); }
   .item-pin { position: absolute; top: 4px; right: 4px; width: 14px; height: 14px; pointer-events: none; color: var(--ink-faint); line-height: 1; }
   .item-pin svg { width: 14px; height: 14px; }
   .bookmarks-panel { position: fixed; z-index: 200; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; max-height: 60vh; overflow-y: auto; display: none; flex-direction: column; min-width: 260px; }
@@ -175,6 +183,19 @@
   .sb-item-time { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-faint); flex-shrink: 0; white-space: nowrap; }
   .sb-divider-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); padding: 12px 20px 6px; }
   .sb-empty { padding: 24px 20px; text-align: center; color: var(--ink-faint); font-size: 13px; line-height: 1.5; }
+  .sb-action-item { display: flex; align-items: center; gap: 8px; padding: 5px 20px 5px 38px; cursor: pointer; transition: background 0.1s; min-height: 30px; }
+  .sb-action-item:hover { background: var(--bg-deep); }
+  .sb-action-item.done { opacity: 0.5; }
+  .sb-action-item.done .sb-action-text { text-decoration: line-through; text-decoration-thickness: 1px; }
+  .sb-action-check { width: 16px; height: 16px; border: 1.5px solid var(--ink-faint); border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.12s; }
+  .sb-action-check:hover { border-color: var(--ink); }
+  .sb-action-check.checked { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .sb-action-text { flex: 1; font-size: 12.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-action-priority { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 999px; flex-shrink: 0; letter-spacing: 0.03em; }
+  .sb-action-priority.p1 { background: rgba(220, 60, 60, 0.12); color: #c0392b; }
+  .sb-action-priority.p2 { background: rgba(230, 160, 30, 0.12); color: #b87d08; }
+  .sb-action-priority.p3 { background: rgba(27, 26, 23, 0.06); color: var(--ink-faint); }
+  .sb-group-count.has-open { color: var(--ink); font-weight: 500; }
 
   #lasso { position: fixed; display: none; border: 1px solid var(--accent); background: var(--accent-soft); pointer-events: none; z-index: 10000; }
   #scale-overlay { position: fixed; display: none; border: 2px dashed var(--accent); pointer-events: none; z-index: 9999; box-sizing: border-box; }
@@ -393,7 +414,7 @@
           <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/>
           <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
-        <input id="search-input" type="text" placeholder="Search notes, tags... recent:7d pinned:yes">
+        <input id="search-input" type="text" placeholder="Search notes, tags... recent:7d pinned:yes action:yes">
         <button class="global-search-toggle" id="global-search-toggle" title="Search across all workspaces">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 7h11M7 1.5c-1.5 1.5-2 3.5-2 5.5s.5 4 2 5.5M7 1.5c1.5 1.5 2 3.5 2 5.5s-.5 4-2 5.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
         </button>
@@ -446,6 +467,7 @@
       <div class="sb-tabs">
         <button class="sb-tab active" data-view="tags">Tags</button>
         <button class="sb-tab" data-view="timeline">Timeline</button>
+        <button class="sb-tab" data-view="actions">Actions</button>
       </div>
     </div>
     <div class="sb-body" id="sb-body"></div>
@@ -1469,7 +1491,7 @@ function updateItemElement(el, item) {
   if (tags.length > 0) {
     if (!tagsEl) { tagsEl = document.createElement('div'); tagsEl.className = 'item-tags'; el.appendChild(tagsEl); }
     tagsEl.innerHTML = '';
-    tags.forEach(t => { const chip = document.createElement('span'); chip.className = 'tag-chip'; chip.textContent = t; tagsEl.appendChild(chip); });
+    tags.forEach(t => { const chip = document.createElement('span'); const tl = t.toLowerCase(); let cls = 'tag-chip'; if (tl === 'p1') cls += ' tag-p1'; else if (tl === 'p2') cls += ' tag-p2'; else if (tl === 'done') cls += ' tag-done'; chip.className = cls; chip.textContent = t; tagsEl.appendChild(chip); });
   } else if (tagsEl) { tagsEl.remove(); }
   // Render timestamp (hidden by default, shown on hover via CSS)
   let tsEl = el.querySelector('.item-timestamp');
@@ -1485,6 +1507,20 @@ function updateItemElement(el, item) {
   if (item.pinned) {
     if (!pinEl) { pinEl = document.createElement('div'); pinEl.className = 'item-pin'; pinEl.innerHTML = '<svg viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5h8a.5.5 0 01.5.5v10.5a.5.5 0 01-.8.4L7 10l-3.7 2.9a.5.5 0 01-.8-.4V2a.5.5 0 01.5-.5z"/></svg>'; el.appendChild(pinEl); }
   } else if (pinEl) { pinEl.remove(); }
+  // Action item badge
+  let actionBadge = el.querySelector('.action-badge');
+  const isAction = isActionItem(item);
+  if (isAction) {
+    if (!actionBadge) { actionBadge = document.createElement('div'); actionBadge.className = 'action-badge'; el.appendChild(actionBadge); }
+    const pri = getActionPriority(item);
+    actionBadge.classList.remove('p1', 'p2');
+    if (pri === 1) actionBadge.classList.add('p1');
+    else if (pri === 2) actionBadge.classList.add('p2');
+    el.classList.toggle('action-done', isActionDone(item));
+  } else {
+    if (actionBadge) actionBadge.remove();
+    el.classList.remove('action-done');
+  }
 }
 
 function updateSelectionVisuals() {
@@ -3167,6 +3203,32 @@ document.addEventListener('mousedown', (e) => {
   }
 });
 
+/* ── Action Item Helpers ── */
+function isActionItem(item) { return (item.tags || []).some(t => t.toLowerCase() === 'action'); }
+function getActionOwner(item) {
+  const tags = (item.tags || []).map(t => t.toLowerCase());
+  for (const t of tags) {
+    if (t === 'self') return 'self';
+    if (t.startsWith('1:1/')) return t.substring(4);
+  }
+  return 'self';
+}
+function getActionPriority(item) {
+  const tags = (item.tags || []).map(t => t.toLowerCase());
+  if (tags.includes('p1')) return 1;
+  if (tags.includes('p2')) return 2;
+  if (tags.includes('p3')) return 3;
+  return 4;
+}
+function isActionDone(item) { return (item.tags || []).some(t => t.toLowerCase() === 'done'); }
+function toggleActionDone(item) {
+  if (!item.tags) item.tags = [];
+  const idx = item.tags.findIndex(t => t.toLowerCase() === 'done');
+  if (idx >= 0) item.tags.splice(idx, 1);
+  else item.tags.push('done');
+  item.modifiedAt = Date.now();
+}
+
 /* ── Sidebar / Outline ── */
 let sidebarView = 'tags';
 let collapsedGroups = new Set();
@@ -3215,6 +3277,37 @@ function buildSbItem(item) {
   return row;
 }
 
+function buildActionItem(item) {
+  const row = document.createElement('div');
+  const done = isActionDone(item);
+  row.className = 'sb-action-item' + (done ? ' done' : '');
+  const check = document.createElement('div');
+  check.className = 'sb-action-check' + (done ? ' checked' : '');
+  if (done) check.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  check.onclick = (e) => {
+    e.stopPropagation();
+    pushUndo();
+    toggleActionDone(item);
+    updateItemElement(itemElements.get(item.id), item);
+    renderSidebar();
+    scheduleSave();
+  };
+  row.appendChild(check);
+  const textSpan = document.createElement('span');
+  textSpan.className = 'sb-action-text';
+  textSpan.textContent = getItemPreview(item);
+  row.appendChild(textSpan);
+  const pri = getActionPriority(item);
+  if (pri <= 3) {
+    const priBadge = document.createElement('span');
+    priBadge.className = 'sb-action-priority p' + pri;
+    priBadge.textContent = 'p' + pri;
+    row.appendChild(priBadge);
+  }
+  row.onclick = () => navigateToItem(item);
+  return row;
+}
+
 function renderSidebar() {
   const body = $('sb-body');
   const stats = $('sb-stats');
@@ -3241,6 +3334,7 @@ function renderSidebar() {
   }
 
   if (sidebarView === 'tags') renderTagsView(body, items);
+  else if (sidebarView === 'actions') renderActionsView(body, items);
   else renderTimelineView(body, items);
 }
 
@@ -3371,6 +3465,54 @@ function renderTimelineView(body, items) {
   });
 }
 
+function renderActionsView(body, items) {
+  const actionItems = items.filter(isActionItem);
+  if (actionItems.length === 0) {
+    body.innerHTML = '<div class="sb-empty">No action items yet.<br><br>Tag any note with <code style="font-family:\'JetBrains Mono\',monospace;font-size:0.9em;background:rgba(27,26,23,0.06);padding:1px 5px;border-radius:3px;">action</code> to track it here.<br>Add <code style="font-family:\'JetBrains Mono\',monospace;font-size:0.9em;background:rgba(27,26,23,0.06);padding:1px 5px;border-radius:3px;">self</code> or <code style="font-family:\'JetBrains Mono\',monospace;font-size:0.9em;background:rgba(27,26,23,0.06);padding:1px 5px;border-radius:3px;">1:1/name</code> for owner, <code style="font-family:\'JetBrains Mono\',monospace;font-size:0.9em;background:rgba(27,26,23,0.06);padding:1px 5px;border-radius:3px;">p1</code> <code style="font-family:\'JetBrains Mono\',monospace;font-size:0.9em;background:rgba(27,26,23,0.06);padding:1px 5px;border-radius:3px;">p2</code> <code style="font-family:\'JetBrains Mono\',monospace;font-size:0.9em;background:rgba(27,26,23,0.06);padding:1px 5px;border-radius:3px;">p3</code> for priority.</div>';
+    return;
+  }
+  const ownerMap = new Map();
+  actionItems.forEach(item => {
+    const owner = getActionOwner(item);
+    if (!ownerMap.has(owner)) ownerMap.set(owner, []);
+    ownerMap.get(owner).push(item);
+  });
+  const sortedOwners = Array.from(ownerMap.keys()).sort((a, b) => {
+    if (a === 'self') return -1;
+    if (b === 'self') return 1;
+    return a.localeCompare(b);
+  });
+  sortedOwners.forEach(owner => {
+    const groupItems = ownerMap.get(owner);
+    groupItems.sort((a, b) => {
+      const aDone = isActionDone(a) ? 1 : 0, bDone = isActionDone(b) ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      const aPri = getActionPriority(a), bPri = getActionPriority(b);
+      if (aPri !== bPri) return aPri - bPri;
+      return (b.modifiedAt || 0) - (a.modifiedAt || 0);
+    });
+    const openCount = groupItems.filter(i => !isActionDone(i)).length;
+    const groupKey = 'action:' + owner;
+    const group = document.createElement('div');
+    group.className = 'sb-group' + (collapsedGroups.has(groupKey) ? ' collapsed' : '');
+    const header = document.createElement('div');
+    header.className = 'sb-group-header';
+    const displayName = owner === 'self' ? 'My Actions' : '1:1 / ' + owner;
+    const countText = openCount > 0 ? openCount + ' open' : 'all done';
+    header.innerHTML = `<svg class="sb-group-arrow" viewBox="0 0 10 10" fill="none"><path d="M2 3l3 3.5L8 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sb-group-name" style="text-transform:none;">${displayName}</span><span class="sb-group-count${openCount > 0 ? ' has-open' : ''}">${countText}</span>`;
+    header.onclick = () => {
+      if (collapsedGroups.has(groupKey)) collapsedGroups.delete(groupKey); else collapsedGroups.add(groupKey);
+      group.classList.toggle('collapsed');
+    };
+    const itemsContainer = document.createElement('div');
+    itemsContainer.className = 'sb-group-items';
+    groupItems.forEach(item => itemsContainer.appendChild(buildActionItem(item)));
+    group.appendChild(header);
+    group.appendChild(itemsContainer);
+    body.appendChild(group);
+  });
+}
+
 $('sidebar-btn').onclick = () => toggleSidebar();
 $('sidebar-close').onclick = () => toggleSidebar();
 
@@ -3438,7 +3580,7 @@ function applySearchFilter() {
 
   // Parse timeline and special tokens from query
   let textQuery = query;
-  let afterDate = null, beforeDate = null, recentDays = null, pinnedOnly = false, filesOnly = false;
+  let afterDate = null, beforeDate = null, recentDays = null, pinnedOnly = false, filesOnly = false, actionOnly = false;
   let hasTimelineTokens = false;
 
   // Extract pinned:yes
@@ -3446,6 +3588,9 @@ function applySearchFilter() {
 
   // Extract file:yes — filter to document items only
   textQuery = textQuery.replace(/\bfile:yes\b/gi, () => { filesOnly = true; return ''; });
+
+  // Extract action:yes — filter to action items only
+  textQuery = textQuery.replace(/\baction:yes\b/gi, () => { actionOnly = true; return ''; });
 
   // Extract after:YYYY-MM-DD
   textQuery = textQuery.replace(/\bafter:(\d{4}-\d{2}-\d{2})\b/g, (_, d) => {
@@ -3482,6 +3627,7 @@ function applySearchFilter() {
     // Check type filters
     if (filesOnly && it.type !== 'file') return;
     if (pinnedOnly && !it.pinned) return;
+    if (actionOnly && !isActionItem(it)) return;
 
     // Check timeline filters
     if (hasTimelineTokens) {
@@ -3581,7 +3727,7 @@ $('search-input').addEventListener('keydown', (e) => {
     if (globalSearchMode) {
       globalSearchMode = false;
       $('global-search-toggle').classList.remove('active');
-      $('search-input').placeholder = 'Search notes, tags... recent:7d pinned:yes';
+      $('search-input').placeholder = 'Search notes, tags... recent:7d pinned:yes action:yes';
     }
     applySearchFilter();
     $('search-input').blur();
@@ -3738,7 +3884,7 @@ $('nav-forward-btn').onclick = () => navForward();
 $('global-search-toggle').onclick = () => {
   globalSearchMode = !globalSearchMode;
   $('global-search-toggle').classList.toggle('active', globalSearchMode);
-  $('search-input').placeholder = globalSearchMode ? 'Search across all workspaces...' : 'Search notes, tags... recent:7d pinned:yes';
+  $('search-input').placeholder = globalSearchMode ? 'Search across all workspaces...' : 'Search notes, tags... recent:7d pinned:yes action:yes';
   if (state.searchQuery) applySearchFilter();
 };
 
