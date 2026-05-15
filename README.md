@@ -27,6 +27,7 @@ Track follow-ups and tasks directly on your canvas using tag conventions:
 - **Set priority** — Add `p1` (red), `p2` (amber), or `p3` tags. Higher priority items sort first.
 - **Mark done** — Add the `done` tag. Done items are visually muted on the canvas and in the sidebar.
 - **Actions sidebar** — Press `\` to open the sidebar, then click the **Actions** tab. Items are grouped by owner ("My Actions" first, then each 1:1 contact), sorted by priority within each group. Toggle completion directly from the checkbox.
+- **Global actions view** — In the Actions tab, click the globe toggle ("All workspaces") to see action items across every workspace. Items are grouped by owner, then sub-grouped by workspace. Click any item to navigate to it — cross-workspace items will switch canvases automatically. Checkboxes are editable for items on the current canvas; cross-workspace items show read-only status.
 - **Search** — Use `action:yes` in the search bar to filter to action items only.
 
 Example tags for a note: `action, 1:1/sarah, p1`
